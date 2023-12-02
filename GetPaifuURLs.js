@@ -9,8 +9,6 @@
 // @grant        none
 // ==/UserScript==
 
-// ***現時点ではChromeでしか動作確認出来ていません***
-
 (function() {
     'use strict';
     const MAX_URL_COUNT = 30; //牌譜URL取得件数、変更可
