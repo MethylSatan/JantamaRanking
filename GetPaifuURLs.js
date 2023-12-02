@@ -38,7 +38,7 @@
         let test = app.NetAgent.sendReq2Lobby(
             "Lobby",
             "fetchGameRecordList",
-            {start:i, count:MAX_URL_COUNT, type:type},
+            {start:0, count:MAX_URL_COUNT, type:type},
             function(error, Records) {
                 if (Records.record_list.length == 0) {
                     return;
