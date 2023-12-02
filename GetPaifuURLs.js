@@ -4,7 +4,7 @@
 // @version      0.1
 // @description  try to take over the world!
 // @author       Buntaicho
-// @match        https://game.mahjongsoul.com*
+// @match        https://game.mahjongsoul.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=mahjongsoul.com
 // @grant        none
 // ==/UserScript==
@@ -35,7 +35,7 @@
 
     async function getRecords(type) {
         let urls = "";
-        let test = app.NetAgent.sendReq2Lobby(
+        app.NetAgent.sendReq2Lobby(
             "Lobby",
             "fetchGameRecordList",
             {start:0, count:MAX_URL_COUNT, type:type},
