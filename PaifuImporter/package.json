@@ -1,0 +1,21 @@
+{
+  "name": "jantama-ranking",
+  "version": "0.0.1",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "assert": "^2.0.0",
+    "moment": "^2.24.0",
+    "protobufjs": "^6.8.8",
+    "request-promise": "^4.2.4",
+    "uuid": "^3.3.3",
+    "ws": "^8.4.0"
+  },
+  "devDependencies": {
+  }
+}
