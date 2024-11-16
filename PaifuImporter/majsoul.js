@@ -364,10 +364,7 @@ async function createMajsoulConnection(accessToken = ACCESS_TOKEN, preferredServ
   const proto = new MajsoulProtoCodec(pbDef, pbVersion);
   const serverIndex = Math.floor(Math.random() * serverList.servers.length);
   const type = parseInt(OAUTH_TYPE) || 0;
-  let server = serverList.servers[serverIndex];
-  if (server.indexOf("maj-soul") > -1) {
-    server += "/gateway";
-  }
+  let server = serverList.servers[serverIndex] + "/gateway";
   let shouldRetry = false;
   try {
     const conn = new MajsoulConnection(`${wsScheme}://${server}`, proto, async (conn) => {
