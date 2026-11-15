@@ -13,7 +13,7 @@
 | [006](006-collect-by-operator-account.md) | 運営アカウントでの牌譜回収ツールの実装 | 005、007 | todo |
 | [007](007-l2-login-investigation.md) | Node から直接ログインする方法（L2）の調査 | 005 | done |
 | [008](008-web-service-design.md) | セルフサービスの Web サービスの構成検討 | 007 | todo |
-| [009](009-credential-lifetime.md) | 運営アカウントの認証情報の有効期間と取り直し方 | 007 | todo |
+| [009](009-credential-lifetime.md) | 運営アカウントの認証情報の有効期間と取り直し方 | 007 | doing |
 
 ## 新しいタスクの作り方
 - ファイル名は `NNN-短い名前.md`（連番）。この表にも行を足す

@@ -41,6 +41,7 @@
   3. `oauth2Auth`（`type=21`、`code`=Token、`uid`=ID）→ `access_token`（36文字。毎回変わる）→ `oauth2Check` → `oauth2Login`（`client_version: {resource, package}`、`tag="jp"` など）
   4. 2本目の接続 `jpgsbk` では、`requestConnection`（`type=2`、`route_id="jp-2"`、項目6 = `"Web"`）→ `prepareLogin`（`access_token`）を送る
   - Node だけでも、保存した `code` / `uid` と項目6で、ログインから牌譜の取得まで通る（タスク 007）。Yostar の HTTP API を Node から呼ぶ必要はない
+  - Yostar の Token は端末ごとに管理されている（`/user/device-list`・`/user/remove-device`）。期限切れ（`100403`）になることもある。有効期間はタスク 009 で計測中
   - WebGL 版は、公開の liqi.json にない項目を送ることがある（`oauth2Login` の `device` の中など）。差は、送信バイトをデコード→再エンコードして比べると見つかる
 - 他人を指定できる主な要求: `searchAccountByEid`（表示 ID → 内部 ID）、`fetchAccountInfoExtra(account_id, category, type)`（`category` 1=四麻/2=三麻、`type` 1=段位戦/2=友人戦。最新50件、2024-08 ごろ以降）
 
