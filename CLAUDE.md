@@ -31,6 +31,7 @@ Tampermonkey スクリプトは `Tampermonkey/` にある。ブラウザの拡�
 | `docs/tasks/README.md` | タスク一覧と状態。セッション開始時の入口 |
 | `docs/tasks/NNN-*.md` | タスクごとの詳細 |
 | `architecture.png` | 全体像の図（取得→Drive→GAS→スプレッドシート） |
+| `docs/local/` | ローカル限定のメモ（gitignore 済み。別の環境には無いことがある）。入口は `docs/local/README.md` |
 
 ## セッションの進め方
 1セッション1タスクを基本とする。
@@ -44,5 +45,7 @@ Tampermonkey スクリプトは `Tampermonkey/` にある。ブラウザの拡�
 - 文書は日本語。コード識別子は英語
 - コミットメッセージは英語で短く
 - `env.js`、トークン、牌譜データ（`input/` `output/`）はコミットしない
+- 公開リポジトリなので、機微な内容は `docs/local/` に書く。対象は、規約などについての判断、検証に使ったアカウント、個人の対局の具体（日時・件数・ニックネーム）。公開側の文書には、API の仕様や設計の要旨だけを書き、必要なら `docs/local/` を指す
+- アカウント ID・トークンは、`docs/local/` にも書かない。使う場所（`local/probe/targets*.json` など）にだけ置く
 - 外部由来のコード（`downloadlogs.js` など）は、出典を冒頭コメントに残す
 - 雀魂のサーバーへ繰り返しアクセスするコードは、間隔を空ける（負荷をかけない）
