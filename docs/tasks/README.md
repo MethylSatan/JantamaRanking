@@ -10,7 +10,9 @@
 | [003](003-import-gas-script.md) | GAS スクリプトとシートのサンプルをリポジトリに取り込む | - | todo |
 | [004](004-readme-setup.md) | README の導入方法を書く | 002 | todo |
 | [005](005-paifu-collection-method.md) | 牌譜の回収方式の検討 | 001 | done |
-| [006](006-collect-by-operator-account.md) | 運営アカウントでの牌譜回収ツールの実装 | 005 | todo |
+| [006](006-collect-by-operator-account.md) | 運営アカウントでの牌譜回収ツールの実装 | 005、007 | todo |
+| [007](007-l2-login-investigation.md) | Node から直接ログインする方法（L2）の調査 | 005 | todo |
+| [008](008-web-service-design.md) | セルフサービスの Web サービスの構成検討 | 007 | todo |
 
 ## 新しいタスクの作り方
 - ファイル名は `NNN-短い名前.md`（連番）。この表にも行を足す

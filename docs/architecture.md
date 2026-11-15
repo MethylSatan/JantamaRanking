@@ -35,6 +35,12 @@
 - 接続先は `wss://jpgs.mahjongsoul.com/gateway`。ログイン後に `jpgsbk.mahjongsoul.com/gateway` も張る。最初に `.lq.Route.requestConnection` を送る
 - 形式は従来どおり liqi（protobuf）。定義は `version.json` → `resversion<ver>.json` → `liqi.json` で取れる
 - `client_version_string` は `WebGL_2022-0.16.280` の形式
+- ログインの流れ（タスク 006 で確認）
+  1. ブラウザ側で Yostar の SDK が HTTP API（`jp-sdk-api.yostarplat.com`。`/user/quick-login` など）を呼び、`UserInfo.ID`（11文字）と `UserInfo.Token`（40文字）を得る。値はログインのたびに同じだった。HTTP の要求には、`authorization` ヘッダーとして JSON（`Head`: 地域・PID・端末 ID・UID・Token・時刻など。`Sign`: 32文字）が付いている
+  2. `jpgs` に接続して `Route.requestConnection`（`type=1`、`route_id="jp-1"`）を送り、`Route.heartbeat` を定期的に送る
+  3. `oauth2Auth`（`type=21`、`code`=Token、`uid`=ID）→ `access_token`（36文字。毎回変わる）→ `oauth2Check` → `oauth2Login`（`client_version: {resource, package}`、`tag="jp"` など）
+  4. 2本目の接続 `jpgsbk` では、`requestConnection`（`type=2`、`route_id="jp-2"`）→ `prepareLogin`（`access_token`）を送る
+  - 同じ `code` / `uid` で Node から `oauth2Auth` を送ると `err=151` になる（原因は未解明。タスク 007）
 - 他人を指定できる主な要求: `searchAccountByEid`（表示 ID → 内部 ID）、`fetchAccountInfoExtra(account_id, category, type)`（`category` 1=四麻/2=三麻、`type` 1=段位戦/2=友人戦。最新50件、2024-08 ごろ以降）
 
 ## 既知の注意点
