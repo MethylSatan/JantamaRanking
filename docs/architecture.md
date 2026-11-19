@@ -180,7 +180,14 @@ pt は雀魂がサーバーで計算した値（`total_point`）で、GAS は計
 ## 雀魂の WebGL 版の通信（タスク 001・005 で確認）
 - 接続先は `wss://jpgs.mahjongsoul.com/gateway`。ログイン後に `jpgsbk.mahjongsoul.com/gateway` も張る。最初に `.lq.Route.requestConnection` を送る
 - 形式は従来どおり liqi（protobuf）。定義は `version.json` → `resversion<ver>.json` → `liqi.json` で取れる
-- `client_version_string` は `WebGL_2022-0.16.280` の形式。雀魂の更新でバージョンが上がり、古いバージョンのままだと `oauth2Auth` が `err=151` になる（2026-11-19 に `0.16.287` を確認。追従の方法はタスク 016）
+- `client_version_string` は `WebGL_2022-0.16.280` の形式。雀魂の更新でバージョンが上がり、古いバージョンのままだと `oauth2Auth` が `err=151` になる（2026-11-19 に `0.16.287` を確認）
+- 雀魂のバージョンは、ブラウザなしで静的ファイルから得られる（タスク 016）。ログインで送る値は3つ
+  - `client_version.resource`: `appstatic.mahjongsoul.com/v4/jp/resources/ab/WebGL/ASTC/bundle_info_so.majset`（UnityFS。LZ4 で圧縮）を展開し、`u6v_td1bd8bb002s_<20桁の16進>` という名前を探す。同じ場所からそのファイル（約1KB、UnityFS）を取って展開すると、`{"version":"0.16.287","platform":"WebGL"}` が入っている。名前の前半はバージョンが変わっても同じで、後半のハッシュだけが変わる（11/16 と 11/19 で確認）
+  - `client_version_string`: `WebGL_2022-` に `resource` を付けたもの。前半の `WebGL_2022-` は固定とみている（出どころは未確認）
+  - `client_version.package`: `https://game.mahjongsoul.com/` の `window.__webglProductVersion`（`4.0.18`）
+  - 静的ファイルには、ゲームと同じようにランダムな `randv` クエリを付ける。`bundle_hash.txt`（40桁）は `bundle_info_so.majset` の SHA-1・MD5 ではなかった。何のハッシュかは未確認
+  - Web サービスでは、前回の値を保存して使い、`oauth2Auth` が `err=151` のときだけ取り直して、ログインを1回だけやり直す（`docs/decisions.md` 2026-11-19 タスク 016）
+  - 旧クライアント（Laya 版）の `version.json` は `0.11.x` の系列で、WebGL 版の雀魂のバージョンとは別物
 - ログインの流れ（タスク 006 で確認）
   1. ブラウザ側で Yostar の SDK が HTTP API（`jp-sdk-api.yostarplat.com`。`/user/quick-login` など）を呼び、`UserInfo.ID`（11文字）と `UserInfo.Token`（40文字）を得る。値はログインのたびに同じだった。HTTP の要求には、`authorization` ヘッダーとして JSON（`Head`: 地域・PID・端末 ID・UID・Token・時刻など。`Sign`: 32文字）が付いている
   2. `jpgs` に接続して `Route.requestConnection`（`type=1`、`route_id="jp-1"`、**項目6 = `"Web"`**）を送り、`Route.heartbeat` を定期的に送る。項目6は公開の liqi.json の定義になく、デコードでは見えない。これがないと `oauth2Auth` が `err=151` になる
