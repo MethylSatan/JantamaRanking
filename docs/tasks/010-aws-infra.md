@@ -15,6 +15,7 @@ Web サービスの配信と API の基盤を、Terraform で作る。word-flash
 - 作るもの: S3（画面・ランキングの JSON・牌譜の json）、CloudFront（WAF、定額の無料プラン）、Lambda と Function URL、DynamoDB、SSM Parameter Store（認証情報の置き場。値は Terraform に書かず、手で入れる）、Cognito のユーザープール（運営1人、自己登録なし）、EventBridge Scheduler、デプロイ用の IAM ロール
 - **最初に確かめる**: Lambda Function URL を定額プランのディストリビューションの配信元にできるか（OAC、AWS 管理のポリシーだけで足りるか）。だめなら API Gateway の HTTP API にし、決定ログに書く
 - Free プランは1アカウントで3つまで。word-flashcard で1つ使っている
+- 牌譜の S3 はバージョニングを有効にし、DynamoDB はポイントインタイムリカバリを有効にする（`docs/architecture.md`「作り直し・取り消し・履歴」）。料金を確かめる
 - GitHub Actions で main への push でデプロイする
 - 手順を `docs/deploy.md` に書く（word-flashcard の形式に合わせる）
 
