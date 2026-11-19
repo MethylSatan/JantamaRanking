@@ -6,14 +6,19 @@
 | # | タスク | 依存 | 状態 |
 |---|---|---|---|
 | [001](001-verify-current.md) | 現状コードの動作確認 | - | done |
-| [002](002-gas-alternative.md) | GAS 依存をやめる方式の検討 | 001 | todo |
+| [002](002-gas-alternative.md) | GAS 依存をやめる方式の検討（008 で決着） | 001 | done |
 | [003](003-import-gas-script.md) | GAS スクリプトとシートのサンプルをリポジトリに取り込む | - | todo |
-| [004](004-readme-setup.md) | README の導入方法を書く | 002 | todo |
+| [004](004-readme-setup.md) | README の導入方法を書く | 013 | todo |
 | [005](005-paifu-collection-method.md) | 牌譜の回収方式の検討 | 001 | done |
-| [006](006-collect-by-operator-account.md) | 運営アカウントでの牌譜回収ツールの実装 | 005、007 | todo |
+| [006](006-collect-by-operator-account.md) | 運営アカウントでの牌譜回収ツールの実装 | 005、007、011 | todo |
 | [007](007-l2-login-investigation.md) | Node から直接ログインする方法（L2）の調査 | 005 | done |
-| [008](008-web-service-design.md) | セルフサービスの Web サービスの構成検討 | 007 | todo |
+| [008](008-web-service-design.md) | セルフサービスの Web サービスの構成検討 | 007 | done |
 | [009](009-credential-lifetime.md) | 運営アカウントの認証情報の有効期間と取り直し方 | 007 | doing |
+| [010](010-aws-infra.md) | AWS 基盤（Terraform とデプロイ） | 008、011 | todo |
+| [011](011-lambda-majsoul-connectivity.md) | Lambda から雀魂に接続できるかの確認 | 007、008 | todo |
+| [012](012-ranking-rules.md) | 集計ルールの移植 | 003 | todo |
+| [013](013-web-ui.md) | Web サービスの画面と API | 006、010、012 | todo |
+| [014](014-x-login.md) | X ログインの調査（主催者への開放） | 013 | todo |
 
 ## 新しいタスクの作り方
 - ファイル名は `NNN-短い名前.md`（連番）。この表にも行を足す
