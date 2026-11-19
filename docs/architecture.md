@@ -78,6 +78,7 @@ Lambda ──(L2、運営アカウント)──▶ 雀魂
 
 ### 既知のリスク
 - Lambda は AWS の IP から雀魂に接続する。弾かれないか、運営がブラウザで遊んでいるときに同時ログインで追い出し合わないかを、先に確かめる（タスク 011）
+  - 2026-11-19: Lambda からの1回目は `oauth2Auth` が `err=151` で失敗した。原因は送った版が古かったこと。版を直すと Lambda からログインから牌譜の取得まで通った（`docs/decisions.md` 2026-11-19 タスク 011）。同時ログインの挙動は未確認
 - 雀魂の利用規約との関係は `docs/local/008-terms-notes.md`
 
 ## 集計（Web サービス。タスク 012）
@@ -179,7 +180,7 @@ pt は雀魂がサーバーで計算した値（`total_point`）で、GAS は計
 ## 雀魂の WebGL 版の通信（タスク 001・005 で確認）
 - 接続先は `wss://jpgs.mahjongsoul.com/gateway`。ログイン後に `jpgsbk.mahjongsoul.com/gateway` も張る。最初に `.lq.Route.requestConnection` を送る
 - 形式は従来どおり liqi（protobuf）。定義は `version.json` → `resversion<ver>.json` → `liqi.json` で取れる
-- `client_version_string` は `WebGL_2022-0.16.280` の形式
+- `client_version_string` は `WebGL_2022-0.16.280` の形式。ゲームの更新で版が上がり、古い版のままだと `oauth2Auth` が `err=151` になる（2026-11-19 に `0.16.287` を確認。追従の方法はタスク 016）
 - ログインの流れ（タスク 006 で確認）
   1. ブラウザ側で Yostar の SDK が HTTP API（`jp-sdk-api.yostarplat.com`。`/user/quick-login` など）を呼び、`UserInfo.ID`（11文字）と `UserInfo.Token`（40文字）を得る。値はログインのたびに同じだった。HTTP の要求には、`authorization` ヘッダーとして JSON（`Head`: 地域・PID・端末 ID・UID・Token・時刻など。`Sign`: 32文字）が付いている
   2. `jpgs` に接続して `Route.requestConnection`（`type=1`、`route_id="jp-1"`、**項目6 = `"Web"`**）を送り、`Route.heartbeat` を定期的に送る。項目6は公開の liqi.json の定義になく、デコードでは見えない。これがないと `oauth2Auth` が `err=151` になる

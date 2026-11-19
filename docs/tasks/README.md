@@ -15,11 +15,12 @@
 | [008](008-web-service-design.md) | セルフサービスの Web サービスの構成検討 | 007 | done |
 | [009](009-credential-lifetime.md) | 運営アカウントの認証情報の有効期間と取り直し方 | 007 | doing |
 | [010](010-aws-infra.md) | AWS 基盤（Terraform とデプロイ） | 008、011 | todo |
-| [011](011-lambda-majsoul-connectivity.md) | Lambda から雀魂に接続できるかの確認 | 007、008 | todo |
+| [011](011-lambda-majsoul-connectivity.md) | Lambda から雀魂に接続できるかの確認 | 007、008 | doing |
 | [012](012-ranking-rules.md) | 集計ルールの移植 | 003 | done |
 | [013](013-web-ui.md) | Web サービスの画面と API | 006、010、012 | todo |
 | [014](014-x-login.md) | X ログインの調査（主催者への開放） | 013 | todo |
 | [015](015-legacy-data-migration.md) | 旧方式の牌譜（Drive）の移行 | 010、012 | todo |
+| [016](016-client-version-tracking.md) | 雀魂の版への追従 | 011 | todo |
 
 ## 新しいタスクの作り方
 - ファイル名は `NNN-短い名前.md`（連番）。この表にも行を足す
