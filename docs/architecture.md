@@ -179,7 +179,14 @@ pt は雀魂がサーバーで計算した値（`total_point`）で、GAS は計
 
 ## 雀魂の WebGL 版の通信（タスク 001・005 で確認）
 - 接続先は `wss://jpgs.mahjongsoul.com/gateway`。ログイン後に `jpgsbk.mahjongsoul.com/gateway` も張る。最初に `.lq.Route.requestConnection` を送る
-- 形式は従来どおり liqi（protobuf）。定義は `version.json` → `resversion<ver>.json` → `liqi.json` で取れる
+- 形式は従来どおり liqi（protobuf）。定義は WebGL 版の静的ファイルから作る（タスク 017）
+  - `bundle_info_so.majset` を展開すると、資産のパスごとに、入っているバンドルの番号が分かる。定義に要るのは2つ
+    - `MyAssets/docs/proto_config.bytes`（平文の JSON）: サービスのメソッドと要求・応答の型名の一覧
+    - Lua の定義ファイル（protoc-gen-lua の生成物）: 型ごとの項目の名前・番号・型。暗号化されていて、鍵は公開リポジトリに置かない
+  - 2つを合わせて、protobufjs の JSON（旧来の liqi.json と同じ形）にする。具体は `docs/local/017-liqi-notes.md`
+  - Web サービスでは、雀魂のバージョンと同じく `oauth2Auth` が `err=151` のときだけ作り直して S3 に置く。使っている型の項目番号・型が変わっていたら採用せずに通知する（`docs/decisions.md` 2026-11-19 タスク 017）
+  - 旧クライアント（Laya 版）の経路（`version.json` → `resversion<ver>.json` → `liqi.json`）は、2026-11 時点で更新が止まっている。牌譜の型（`Record*`）とログインに使う型は WebGL 版と同じなので、比較用に残す
+  - こちらから送る要求では、repeated の数値を packed にしない（ゲームと揃える）。サーバーは packed で返す
 - `client_version_string` は `WebGL_2022-0.16.280` の形式。雀魂の更新でバージョンが上がり、古いバージョンのままだと `oauth2Auth` が `err=151` になる（2026-11-19 に `0.16.287` を確認）
 - 雀魂のバージョンは、ブラウザなしで静的ファイルから得られる（タスク 016）。ログインで送る値は3つ
   - `client_version.resource`: `appstatic.mahjongsoul.com/v4/jp/resources/ab/WebGL/ASTC/bundle_info_so.majset`（UnityFS。LZ4 で圧縮）を展開し、`u6v_td1bd8bb002s_<20桁の16進>` という名前を探す。同じ場所からそのファイル（約1KB、UnityFS）を取って展開すると、`{"version":"0.16.287","platform":"WebGL"}` が入っている。名前の前半はバージョンが変わっても同じで、後半のハッシュだけが変わる（11/16 と 11/19 で確認）
@@ -190,12 +197,12 @@ pt は雀魂がサーバーで計算した値（`total_point`）で、GAS は計
   - 旧クライアント（Laya 版）の `version.json` は `0.11.x` の系列で、WebGL 版の雀魂のバージョンとは別物
 - ログインの流れ（タスク 006 で確認）
   1. ブラウザ側で Yostar の SDK が HTTP API（`jp-sdk-api.yostarplat.com`。`/user/quick-login` など）を呼び、`UserInfo.ID`（11文字）と `UserInfo.Token`（40文字）を得る。値はログインのたびに同じだった。HTTP の要求には、`authorization` ヘッダーとして JSON（`Head`: 地域・PID・端末 ID・UID・Token・時刻など。`Sign`: 32文字）が付いている
-  2. `jpgs` に接続して `Route.requestConnection`（`type=1`、`route_id="jp-1"`、**項目6 = `"Web"`**）を送り、`Route.heartbeat` を定期的に送る。項目6は公開の liqi.json の定義になく、デコードでは見えない。これがないと `oauth2Auth` が `err=151` になる
+  2. `jpgs` に接続して `Route.requestConnection`（`type=1`、`route_id="jp-1"`、**項目6 = `"Web"`**）を送り、`Route.heartbeat` を定期的に送る。項目6は旧クライアントの liqi.json の定義になく、WebGL 版の定義では `platform`（文字列）。これがないと `oauth2Auth` が `err=151` になる
   3. `oauth2Auth`（`type=21`、`code`=Token、`uid`=ID）→ `access_token`（36文字。毎回変わる）→ `oauth2Check` → `oauth2Login`（`client_version: {resource, package}`、`tag="jp"` など）
   4. 2本目の接続 `jpgsbk` では、`requestConnection`（`type=2`、`route_id="jp-2"`、項目6 = `"Web"`）→ `prepareLogin`（`access_token`）を送る
   - Node だけでも、保存した `code` / `uid` と項目6で、ログインから牌譜の取得まで通る（タスク 007）。Yostar の HTTP API を Node から呼ぶ必要はない
   - Yostar の Token は端末ごとに管理されている（`/user/device-list`・`/user/remove-device`）。期限切れ（`100403`）になることもある。有効期間はタスク 009 で計測中
-  - WebGL 版は、公開の liqi.json にない項目を送ることがある（`oauth2Login` の `device` の中など）。差は、送信バイトをデコード→再エンコードして比べると見つかる
+  - WebGL 版は、旧クライアントの liqi.json にない項目を送る（`oauth2Login` の `device` の中の `device_id` など）。WebGL 版の定義には載っていて、記録済みの要求はすべてバイト単位で再現できた（タスク 017）
 - 他人を指定できる主な要求: `searchAccountByEid`（表示 ID → 内部 ID）、`fetchAccountInfoExtra(account_id, category, type)`（`category` 1=四麻/2=三麻、`type` 1=段位戦/2=友人戦。最新50件、2024-08 ごろ以降）
 
 ## 既知の注意点
