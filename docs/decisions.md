@@ -143,3 +143,11 @@
   理由: 主催者の表示用 ID が手元に無く、記録済みの一覧の参加者から内部 ID が分かった。内部 ID なら `searchAccountByEid` が要らず、要求が1回減る。データモデル（`docs/architecture.md`）でも主催者の内部 ID を持つ。
 - **候補の東風・半荘は、一覧の `sub_tag` から出す**
   理由: 実地で取った60件で、`sub_tag` が牌譜の `config.mode.mode` と全件一致した。牌譜の中身を取らずに、候補の段階で表示できる。意味を確かめていない値（4）は、名前を付けずに数のまま出す。
+
+## 2026-11-20（タスク 019）
+- **word-flashcard に合わせるのはインフラ（AWS・Terraform・GitHub Actions の OIDC）だけにする。言語や画面の技術は、このプロジェクトの条件で選ぶ**（2026-11-19 タスク 008 の「作り方は word-flashcard に合わせる」を補う）
+  理由: ユーザーは word-flashcard を今後更新しないので、インフラ以外を揃える利点がない。2026-11-19 タスク 012 で TypeScript を選んだ理由も「word-flashcard に合わせる」だけだったので、比べ直した。比べた表は `docs/tasks/019-language-and-ui-stack.md`。
+- **サーバー側（牌譜回収・集計・Lambda）は TypeScript（Node）のまま続ける**
+  理由: 保守するユーザーは Node.js の経験があり、Python・Go の経験はない。集計を画面と共有でき、雀魂の定義（protobufjs の JSON）を実行中にそのまま読める。いまのコードは JS に型の注記を足しただけの範囲（`erasableSyntaxOnly`）で書いていて、`tsc` の型チェックで誤りに気づける。TypeScript の書き方を覚えたくなくなったら、JS ＋ JSDoc（`@ts-check`）に機械的に移せる。
+- **画面は Vite ＋ Preact（TypeScript）で作る**
+  理由: 画面は一覧の選択・並べ替え・絞り込みが中心で、フレームワークなしだと描き直しの処理を自分で書くことになる。Preact は小さく、テンプレート言語を覚えずに JS の関数として書け、React の情報がほぼ使える。Vite は `src/ranking/` の `.ts` をそのまま取り込める。

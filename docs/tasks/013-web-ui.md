@@ -15,7 +15,7 @@
 - 閲覧者の画面: ランキング（推測されない URL、noindex）。列ごとの並べ替えと、名前・期間・四麻か三麻かでの絞り込み。CSV などでの書き出しは用意しない
 - API: 候補の更新、取り込み、対象外にする。雀魂への要求は `docs/architecture.md` の運用に従う（ロック、間隔、上限）
 - 定期取得（EventBridge Scheduler から1日1回程度）
-- 画面の構成は word-flashcard（Vite + TypeScript + Preact）に合わせる見込み。違う選択をするなら決定ログに書く
+- 画面は Vite + TypeScript + Preact で作る（`docs/decisions.md` 2026-11-20 タスク 019）
 - 非エンジニアが迷わない画面にする（`docs/product.md` の非機能要件）
 
 ## 完了条件

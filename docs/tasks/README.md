@@ -23,6 +23,7 @@
 | [016](016-client-version-tracking.md) | 雀魂のバージョンへの追従 | 011 | done |
 | [017](017-liqi-definition-tracking.md) | liqi の定義への追従 | 016 | done |
 | [018](018-new-host-history.md) | 新しい主催者の過去分の取り込み | 006 | todo |
+| [019](019-language-and-ui-stack.md) | 言語と画面の技術の選び直し | 008、012 | done |
 
 ## 新しいタスクの作り方
 - ファイル名は `NNN-短い名前.md`（連番）。この表にも行を足す
