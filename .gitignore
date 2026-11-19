@@ -2,3 +2,6 @@
 # - local/: 調査・検証用のスクリプト、ログイン状態、アカウントID
 # - docs/local/: 公開しない Claude・運営向けのメモ
 local/
+
+# 依存
+node_modules/

@@ -13,12 +13,15 @@ Vtuber の東風乃ちのさんのメン限友人戦向けに作ったもの。2
 - README と利用者向けの手順は、専門用語やリポジトリ構成を書かず、利用者目線で書く。開発者向けの情報は `CLAUDE.md` と `docs/` に置く
 
 ## コマンド
+リポジトリ直下（集計 `src/ranking/`。Node 26 で `.ts` を直接実行する）:
+- `npm install` / `npm test`（`node --test`）/ `npm run typecheck`
+
 `PaifuImporter/` で実行する（Node.js。バージョンは未確認、タスク001で確認する）。
 - `npm install`: 依存を入れる
 - `node getPaifu.js`: `input/` の牌譜URL一覧を読み、牌譜 json を `output/` に書き出す
   - `env.js`（`URL_BASE` / `ACCESS_TOKEN` / `PREFERRED_SERVER` / `OAUTH_TYPE` をエクスポート）が必要。gitignore 済みなので手元で作る
   - 入力ファイル名が `getPaifu.js` 内にハードコードされている（`PaifuURLs_20231216.txt`）
-- テストなし（`npm test` は未設定）
+- テストなし
 
 Tampermonkey スクリプトは `Tampermonkey/` にある。ブラウザの拡張に貼って使う。
 - `GetPaifuURLs.js`: 雀魂の画面で L キー → 友人戦の牌譜URL一覧を `PaifuURLs_YYYYMMDD.txt` で保存
