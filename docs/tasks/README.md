@@ -14,7 +14,7 @@
 | [007](007-l2-login-investigation.md) | Node から直接ログインする方法（L2）の調査 | 005 | done |
 | [008](008-web-service-design.md) | セルフサービスの Web サービスの構成検討 | 007 | done |
 | [009](009-credential-lifetime.md) | 運営アカウントの認証情報の有効期間と取り直し方 | 007 | doing |
-| [010](010-aws-infra.md) | AWS 基盤（Terraform とデプロイ） | 008、011 | todo |
+| [010](010-aws-infra.md) | AWS 基盤（Terraform とデプロイ） | 008、011 | done |
 | [011](011-lambda-majsoul-connectivity.md) | Lambda から雀魂に接続できるかの確認 | 007、008 | done |
 | [012](012-ranking-rules.md) | 集計ルールの移植 | 003 | done |
 | [013](013-web-ui.md) | Web サービスの画面と API | 006、010、012 | todo |

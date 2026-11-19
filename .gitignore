@@ -5,3 +5,8 @@ local/
 
 # 依存
 node_modules/
+
+# ビルドの成果物と Terraform の作業ファイル
+dist/
+.terraform/
+*.tfplan

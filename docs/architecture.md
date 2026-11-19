@@ -10,7 +10,7 @@
 | PaifuImporter | `PaifuImporter/` | Node。`getPaifu.js` が `majsoul.js` で雀魂に WebSocket 接続し、URL一覧の各牌譜を `fetchGameRecord` で取得、`parse()` で変換して `output/` に json 保存 |
 | token.js | `misc/token.js` | WebSocket メッセージ（hex）からアクセストークンを取り出す補助 |
 | 牌譜回収 | `src/collector/` | 運営のアカウントで、主催者の友人戦一覧（`fetchAccountInfoExtra`）と中身（`fetchGameRecordsDetail`）を取る。Web サービスの Lambda から呼ぶ部品と、手元で試す CLI。下の「牌譜回収（タスク 006）」 |
-| Web サービス（実装予定） | 未定（タスク 010〜013） | 下の「Web サービスの構成」 |
+| Web サービス | `infra/`（Terraform）、`src/api/`（Lambda）、`web/`（画面）、`.github/workflows/deploy.yml` | 基盤はタスク 010 で構築済み（`docs/deploy.md`）。画面と API の中身はタスク 013。下の「Web サービスの構成」 |
 | 集計 | `src/ranking/` | 牌譜 json から対局の結果を取り出し、ランキングを作る。依存のない TypeScript の関数。Lambda と画面の両方で使う。下の「集計（Web サービス）」 |
 | Drive / GAS / スプレッドシート | リポジトリ外（GAS の写しは `gas/`） | 旧方式の牌譜の置き場、投入スクリプト、集計。**Web サービスに置き換えてやめる**（2026-11-19）。シートの構成と集計のルールは下の「旧集計（スプレッドシート）」 |
 
@@ -27,13 +27,13 @@
 牌譜 json ──▶ Google Drive ──(GAS)──▶ スプレッドシート（試合結果シート）──▶ 集計
 ```
 
-## Web サービスの構成（タスク 008 で決定、未実装）
+## Web サービスの構成（タスク 008 で決定。基盤はタスク 010 で構築）
 word-flashcard（隣のリポジトリ）の配信基盤に合わせる。決定の理由は `docs/decisions.md` 2026-11-19。
 ```
-ブラウザ → jantama.methylsatan.com（Route 53 の ALIAS）
+ブラウザ → jantama-ranking.methylsatan.com（Route 53 の ALIAS）
         → CloudFront（WAF、*.methylsatan.com の証明書、定額の無料プラン）
             ├ /*     → S3（画面: SPA、ランキングの JSON）
-            └ /api/* → Lambda Function URL → Lambda（Node）
+            └ /api/* → Lambda Function URL（OAC）→ Lambda（Node 24）
 Lambda ──(L2、運営アカウント)──▶ 雀魂
   ├ 認証情報: SSM Parameter Store（SecureString）
   ├ データ: DynamoDB。牌譜の生 json は S3
@@ -48,7 +48,7 @@ Lambda ──(L2、運営アカウント)──▶ 雀魂
 | API（Lambda） | 候補の更新（雀魂から一覧を取る）、取り込み（選んだ対局の中身を取り、結果を保存し、ランキングを作り直す）、対象外にする操作 |
 | 定期取得 | 1日1回程度、登録した主催者の候補を更新する。一覧は種類ごとに最新50件なので、上限に達する前に取りこぼさないため |
 | 認証情報 | 運営アカウントの `code` / `uid`（と端末 ID）。取り直しはタスク 009 |
-| Terraform | `infra/`。状態は `methylsatan-tfstate` の `jantama-ranking/terraform.tfstate`。Route 53 のゾーン、証明書（us-east-1）、GitHub の OIDC プロバイダーは word-flashcard のものを `data` で参照する |
+| Terraform | `infra/`。状態は `methylsatan-tfstate` の `jantama-ranking/terraform.tfstate`。Route 53 のゾーン、証明書（us-east-1）、GitHub の OIDC プロバイダーは word-flashcard のものを `data` で参照する。リソースの一覧・手順・OAC の注意は `docs/deploy.md` |
 
 ### データモデル（概要。実装で詰める）
 - ランキング（企画）: 名前、公開用の推測されない ID、対象の主催者、集計のルール
@@ -73,8 +73,9 @@ Lambda ──(L2、運営アカウント)──▶ 雀魂
 - CloudFront・WAF・Route 53: 定額の無料プランで $0（1アカウントで Free プランは3つまで。word-flashcard で1つ使用）
 - Lambda・DynamoDB・SSM（標準）・EventBridge Scheduler・Cognito: 恒常の無料枠に収まる見込み
 - S3（牌譜の json。バージョニングで古い版も残る）: 1円未満
-- DynamoDB のポイントインタイムリカバリ: データ量に比例（数 MB なら1円未満の見込み。料金はタスク 010 で確かめる）
-- 未確認: Lambda Function URL を定額プランのディストリビューションの配信元にできるか（タスク 010）
+- DynamoDB のポイントインタイムリカバリ: $0.228/GB月（数 MB なら1円未満）
+- Lambda Function URL を配信元にしても、定額の無料プランに加入できた（2026-11-20、タスク 010）
+- 単価と見込みの表は `docs/deploy.md`
 
 ### 既知のリスク
 - Lambda は AWS の IP から雀魂に接続する。弾かれないか、運営がブラウザで遊んでいるときに同時ログインで追い出し合わないかを、先に確かめる（タスク 011）
@@ -118,7 +119,7 @@ Lambda ──(L2、運営アカウント)──▶ 雀魂
 - 保存する牌譜: `RecordGame` の head（`fetchGameRecordsDetail` の `record_list` の1件、protobufjs の `toObject` の形）から、参加者の見た目の情報（`avatar_id`・`character`・`views`・`title`・`avatar_frame`）を外したもの。1件あたり json で約1.2KB（gzip で約0.55KB）。0 や空の項目は省かれる（席 0 の `seat` など）
 - 要求: ログインは1回の実行につき1回（`err=151` のやり直しを除く）。Lobby の要求の間は2秒。`fetchGameRecordsDetail` は50件ずつまとめる（50件まで1回で返ることを確認）。1回の実行で取る牌譜は100件まで
 - 2本目の接続（`jpgsbk`）は張らない。張らなくても一覧と牌譜は取れる（タスク 011・006）
-- Lambda（Node 22）で `.ts` を動かすためのバンドルは、タスク 010 で決める
+- Lambda（`nodejs24.x`）へは、esbuild で1ファイルの ESM にまとめて載せる（`npm run build:api`。タスク 010）
 
 ## 旧集計（スプレッドシート。タスク 003 で記録）
 Web サービスに移す集計のルール（タスク 012）。シートの場所と、データの具体（件数・期間）は `docs/local/003-sheet-notes.md`。

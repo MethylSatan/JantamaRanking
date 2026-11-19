@@ -151,3 +151,19 @@
   理由: 保守するユーザーは Node.js の経験があり、Python・Go の経験はない。集計を画面と共有でき、雀魂の定義（protobufjs の JSON）を実行中にそのまま読める。いまのコードは JS に型の注記を足しただけの範囲（`erasableSyntaxOnly`）で書いていて、`tsc` の型チェックで誤りに気づける。TypeScript の書き方を覚えたくなくなったら、JS ＋ JSDoc（`@ts-check`）に機械的に移せる。
 - **画面は Vite ＋ Preact（TypeScript）で作る**
   理由: 画面は一覧の選択・並べ替え・絞り込みが中心で、フレームワークなしだと描き直しの処理を自分で書くことになる。Preact は小さく、テンプレート言語を覚えずに JS の関数として書け、React の情報がほぼ使える。Vite は `src/ranking/` の `.ts` をそのまま取り込める。
+
+## 2026-11-20（タスク 010）
+- **サービスの URL は `jantama-ranking.methylsatan.com` にする（タスク 008 の時点の `jantama.methylsatan.com` から変える）**
+  理由: ユーザーの判断。`jantama` だけだと、非公式のサービスなのに本家のように見え、運営元へのリスペクトに欠ける。「ゲーム名＋用途」の形にした。用途の語は scoreboard と比べて、日本語でなじみがあり、旧シートの呼び方とも合う ranking にした。ゲーム名は、日本の利用者に分かりやすい「jantama」にした（リポジトリ名ともそろう）。
+- **API は Lambda Function URL を CloudFront の配信元にする（API Gateway は使わない）**
+  理由: 定額の無料プランへの加入が、Function URL（IAM 認証、OAC）を配信元にしたディストリビューションで通った（`ACTIVE` / `FREE`）。使うのは AWS 管理のポリシーだけ（`Managed-CachingDisabled`、`Managed-AllViewerExceptHostHeader`）。OAC の制約（`Authorization` の上書き、POST の本文のハッシュ）は `docs/deploy.md` に書き、タスク 013 に申し送った。
+- **Lambda のランタイムは `nodejs24.x`（arm64）。コードは esbuild で1ファイルの ESM にまとめる**
+  理由: Node 26 のランタイムは 2026-11 時点でプレビュー（SLA の対象外）。`.ts` をそのまま載せるより、依存（protobufjs・ws）ごと1ファイルにする方が、Lambda の読み込みの仕組みに左右されない。
+- **Lambda のコードは GitHub Actions が更新し、Terraform は最初の仮のコードで作るだけにする**
+  理由: 画面を S3 に置くのと同じく、基盤（Terraform、手で apply）と中身（push でデプロイ）を分ける。Terraform の apply にビルドを要らなくする。
+- **デプロイのブランチは `master`**
+  理由: このリポジトリの既定のブランチ。タスクファイルの「main」は word-flashcard から写した書き方だった。
+- **SSM のパラメータは Terraform で作らず、Lambda のロールに `/jantama-ranking/*` の権限だけを付ける。Scheduler は DISABLED で作る。DynamoDB は `pk`/`sk` の1テーブル**
+  理由: パラメータを Terraform で作ると、値が tfstate に入る。定期取得とデータの形はタスク 013 で作る。
+- **GitHub Actions に渡す値（デプロイ用ロールの ARN、バケット名、ディストリビューション ID、関数名）は、変数ではなくシークレットに置く**
+  理由: ユーザーの判断。公開リポジトリでは Actions のログを誰でも見られ、変数の値はそのまま出る（AWS のアカウント ID を含む）。シークレットならログで伏せられる。word-flashcard は非公開なので変数のまま。

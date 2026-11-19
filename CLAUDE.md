@@ -15,6 +15,7 @@ Vtuber の東風乃ちのさんのメン限友人戦向けに作ったもの。2
 ## コマンド
 リポジトリ直下（集計 `src/ranking/`、牌譜回収 `src/collector/`。Node 26 で `.ts` を直接実行する）:
 - `npm install` / `npm test`（`node --test`）/ `npm run typecheck`
+- `npm run build:api`: Lambda 用に `src/api/handler.ts` を `dist/api/index.mjs` にまとめる（esbuild）
 - `node src/collector/cli.ts <コマンド>`: 牌譜回収を手元で試す（`candidates` / `fetch` / `exclude` / `update-static`）。状態は `local/collector/`。手順は `docs/collector.md`
 
 `PaifuImporter/` で実行する（Node.js。バージョンは未確認、タスク001で確認する）。
@@ -34,6 +35,7 @@ Tampermonkey スクリプトは `Tampermonkey/` にある。ブラウザの拡�
 | `docs/product.md` | 何を作るか。目的、機能・非機能要件、スコープ外、未決事項 |
 | `docs/architecture.md` | どう作るか。構成要素、データの流れ、リポジトリ構成、牌譜 json |
 | `docs/collector.md` | 牌譜回収の CLI の使い方 |
+| `docs/deploy.md` | AWS の構成（`infra/`）、デプロイ、費用、OAC の注意 |
 | `docs/decisions.md` | 決定ログ（追記のみ） |
 | `docs/tasks/README.md` | タスク一覧と状態。セッション開始時の入口 |
 | `docs/tasks/NNN-*.md` | タスクごとの詳細 |

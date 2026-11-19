@@ -1,6 +1,6 @@
 # 010 AWS 基盤（Terraform とデプロイ）
 
-状態: todo / 依存: 008、011
+状態: done / 依存: 008、011
 
 ## 目的
 Web サービスの配信と API の基盤を、Terraform で作る。word-flashcard の基盤に合わせる（`docs/decisions.md` 2026-11-19）。
@@ -20,8 +20,15 @@ Web サービスの配信と API の基盤を、Terraform で作る。word-flash
 - 手順を `docs/deploy.md` に書く（word-flashcard の形式に合わせる）
 
 ## 完了条件
-- `https://jantama.methylsatan.com` で空の画面が出て、`/api` の疎通用の要求に Lambda が応える
+- `https://jantama-ranking.methylsatan.com`（当初は `jantama.methylsatan.com`。`docs/decisions.md` 2026-11-20 タスク 010）で空の画面が出て、`/api` の疎通用の要求に Lambda が応える
 - 費用が無料枠に収まる設定であることを確かめ、`docs/deploy.md` に書いている
 
 ## メモ
-（未着手）
+- 2026-11-20: `terraform apply` で32件を作成。定額の無料プランは `ACTIVE` / `FREE` で、Lambda Function URL を配信元にしても加入できた。API Gateway は使わない
+- 確認: 画面 200（`x-robots-tag` 付き）、`/api/health` → `{"ok":true}`、知らないパスは 404、Function URL への直接の要求は 403
+- ブランチはタスクに書いた「main」ではなく、このリポジトリの既定の `master`
+- Lambda は `nodejs24.x`（arm64）。Node 26 のランタイムはプレビューなので使わない。esbuild で1ファイルにまとめる
+- ランキングの JSON は画面用バケットの `rankings/` の下。デプロイの sync はここを除外する
+- SSM のパラメータは Terraform で作らない（値を tfstate に入れない）。Scheduler は DISABLED で作った（処理はタスク 013）
+- 費用は `docs/deploy.md`。Price List API で東京の単価を確認し、定価でも月数円以内
+- OAC の注意（`Authorization` の上書き、POST の `x-amz-content-sha256`）はタスク 013 のメモに申し送った

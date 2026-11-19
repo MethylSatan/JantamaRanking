@@ -23,4 +23,6 @@
 - 閲覧者が URL を開くだけでランキングを見られる
 
 ## メモ
-（未着手）
+- タスク 010 からの申し送り（`docs/deploy.md`「API と OAC」）: CloudFront の OAC が `Authorization` ヘッダーを上書きするので、Cognito の JWT は別の名前のヘッダーで送る。POST・PUT では本文の SHA-256 を `x-amz-content-sha256` に付ける
+- 基盤にあるもの: Lambda の環境変数 `DATA_BUCKET` / `TABLE_NAME` / `SSM_PREFIX`、DynamoDB（`pk`/`sk`）、ランキングの JSON の置き場（画面用バケットの `rankings/`）、Scheduler `jantama-ranking-daily`（DISABLED。入力は `{"source":"scheduler","action":"refresh-candidates"}`）、Cognito のアプリクライアント（SRP）
+- 画面は今 `web/public/` を sync しているだけ。Vite を入れたら、ワークフローの sync 元をビルド結果に変える
