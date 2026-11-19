@@ -13,8 +13,9 @@ Vtuber の東風乃ちのさんのメン限友人戦向けに作ったもの。2
 - README と利用者向けの手順は、専門用語やリポジトリ構成を書かず、利用者目線で書く。開発者向けの情報は `CLAUDE.md` と `docs/` に置く
 
 ## コマンド
-リポジトリ直下（集計 `src/ranking/`。Node 26 で `.ts` を直接実行する）:
+リポジトリ直下（集計 `src/ranking/`、牌譜回収 `src/collector/`。Node 26 で `.ts` を直接実行する）:
 - `npm install` / `npm test`（`node --test`）/ `npm run typecheck`
+- `node src/collector/cli.ts <コマンド>`: 牌譜回収を手元で試す（`candidates` / `fetch` / `exclude` / `update-static`）。状態は `local/collector/`。手順は `docs/collector.md`
 
 `PaifuImporter/` で実行する（Node.js。バージョンは未確認、タスク001で確認する）。
 - `npm install`: 依存を入れる
@@ -32,6 +33,7 @@ Tampermonkey スクリプトは `Tampermonkey/` にある。ブラウザの拡�
 |---|---|
 | `docs/product.md` | 何を作るか。目的、機能・非機能要件、スコープ外、未決事項 |
 | `docs/architecture.md` | どう作るか。構成要素、データの流れ、リポジトリ構成、牌譜 json |
+| `docs/collector.md` | 牌譜回収の CLI の使い方 |
 | `docs/decisions.md` | 決定ログ（追記のみ） |
 | `docs/tasks/README.md` | タスク一覧と状態。セッション開始時の入口 |
 | `docs/tasks/NNN-*.md` | タスクごとの詳細 |

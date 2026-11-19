@@ -9,7 +9,7 @@
 | downloadlogs | `Tampermonkey/downloadlogs.js` | **WebGL 版では動かない（2026-11 時点）。** S キーで、開いている牌譜を json でダウンロード。Equim-chan 作のフォーク |
 | PaifuImporter | `PaifuImporter/` | Node。`getPaifu.js` が `majsoul.js` で雀魂に WebSocket 接続し、URL一覧の各牌譜を `fetchGameRecord` で取得、`parse()` で変換して `output/` に json 保存 |
 | token.js | `misc/token.js` | WebSocket メッセージ（hex）からアクセストークンを取り出す補助 |
-| 牌譜回収（実装予定） | 未定（タスク 006） | 運営のアカウントで、主催者の友人戦一覧（`fetchAccountInfoExtra`）と中身（`fetchGameRecordsDetail`）を取る。Web サービスの Lambda で動く部品として作る。検証用の試作は `local/probe/`（gitignore 済み） |
+| 牌譜回収 | `src/collector/` | 運営のアカウントで、主催者の友人戦一覧（`fetchAccountInfoExtra`）と中身（`fetchGameRecordsDetail`）を取る。Web サービスの Lambda から呼ぶ部品と、手元で試す CLI。下の「牌譜回収（タスク 006）」 |
 | Web サービス（実装予定） | 未定（タスク 010〜013） | 下の「Web サービスの構成」 |
 | 集計 | `src/ranking/` | 牌譜 json から対局の結果を取り出し、ランキングを作る。依存のない TypeScript の関数。Lambda と画面の両方で使う。下の「集計（Web サービス）」 |
 | Drive / GAS / スプレッドシート | リポジトリ外（GAS の写しは `gas/`） | 旧方式の牌譜の置き場、投入スクリプト、集計。**Web サービスに置き換えてやめる**（2026-11-19）。シートの構成と集計のルールは下の「旧集計（スプレッドシート）」 |
@@ -87,7 +87,8 @@ Lambda ──(L2、運営アカウント)──▶ 雀魂
 | ファイル | 内容 |
 |---|---|
 | `types.ts` | `GameResult`（牌譜 uuid、終了時刻、四麻/三麻、各家の結果）、`PlayerResult`（席、アカウント ID、名前、点数、pt、順位）、`RankingRow` |
-| `mjlog.ts` | `fromMjlog`: mjlog 形式（前期・後期とも）の牌譜 json から `GameResult` を作る。読むのは `ref`・`ratingc`・`name`・`sc`・`title[1]` だけ。アカウント ID は無い（新方式の牌譜から作る関数はタスク 006 で足す） |
+| `mjlog.ts` | `fromMjlog`: mjlog 形式（前期・後期とも）の牌譜 json から `GameResult` を作る。読むのは `ref`・`ratingc`・`name`・`sc`・`title[1]` だけ。アカウント ID は無い |
+| `record.ts` | `fromRecordGame`: 新方式の牌譜（雀魂の `RecordGame` の head。タスク 006）から `GameResult` を作る。アカウント ID が入る。点数は `part_point_1`、pt は `total_point / 1000`、終了時刻は `end_time`。`accounts` に無い席は AI |
 | `rank.ts` | 順位は pt の大きい順。pt が同じなら席順（東家が上） |
 | `period.ts` | 日付は日本時間の朝6時で区切る（`businessDay` / `businessMonth` / `businessYear`）。期間 `{ from?, to? }` は両端の日を含む |
 | `aggregate.ts` | `aggregate`: ランキング。`playedThisMonth`: 今月参加済み。`notPlayedThisMonth`: 今年打った人のうち今月まだの人（今年の対局数の多い順） |
@@ -98,6 +99,26 @@ Lambda ──(L2、運営アカウント)──▶ 雀魂
 - 並べ方は累計pt の大きい順。同点は対局数の少ない順、さらにキーの順。順位は 1, 2, 3… と振る（同点でも分ける）
 - 旧シートとの違い: 区切りが0時→6時、年別に12月31日を含む、今月参加済みは1日から（旧四麻は3日から）、累計pt が同点のときの並びを決めた
 - 旧シートとの突合（2026-11-19）: 牌譜 json（Drive のアーカイブの全量）→ 試合結果シート → Ranking シートの3点で比べ、すべて一致した。牌譜から取り出した結果は試合結果シートの全行と、集計は全期間・年別の Ranking シート（四麻・三麻）の全員の値と一致した。年別はシートと同じ区切り（0時、終点を含まない）で比べた。6時区切りにしても、どの年も対局数は変わらない。具体は `docs/local/012-verify-notes.md`
+
+## 牌譜回収（タスク 006）
+`src/collector/`。Lambda から呼ぶ部品（`index.ts`）と、手元で試す CLI（`cli.ts`。手順は `docs/collector.md`）。決定の理由は `docs/decisions.md` 2026-11-19（タスク 006）。
+
+| ファイル | 内容 |
+|---|---|
+| `session.ts` | `openSession(deps)`: 保存済みの雀魂のバージョンと定義でログインする。`oauth2Auth` が `err=151` のときだけ、静的ファイルから作り直し、ログインを1回だけやり直す。`refreshState`: 作り直しだけ（ログインしない） |
+| `collect.ts` | `listCandidates(session, 主催者, 既知か)`: 四麻・三麻の友人戦から、取り込み済み・対象外を除いた候補。`fetchHeads(session, uuids)`: 牌譜の head を取り、見た目の情報を外す。`gameLength(sub_tag)`: 東風・半荘 |
+| `static.ts` / `unityfs.ts` | 公開の静的ファイル（ログインなし）。`bundle_info_so.majset` から、資産のパスが入っているバンドル名を引く |
+| `liqi.ts` | 定義の Lua の復号（鍵は呼び出し側から）、protobufjs の JSON への変換、使っている型の比較 |
+| `connection.ts` / `login.ts` | WebSocket と L2 のログイン。応答に定義に無い項目番号があればログに残す |
+
+- 呼び出し側が渡すもの（`CollectorDeps`）: 雀魂のバージョンと定義の置き場所（`store`。Lambda では S3、CLI ではファイル）、認証情報（Lambda では SSM、CLI では秘密ファイル）、定義の鍵、通知の送り先。取り込み済み・対象外の記録と、同時に実行しないためのロックも呼び出し側が持つ（タスク 013）
+- 主催者は、表示用 ID（`searchAccountByEid` で内部 ID を引く）か内部 ID で指定する。Web サービスでは内部 ID を保存して使う（要求が1回減る）
+- 候補: uuid、開始・終了時刻、四麻/三麻、`sub_tag`、参加者（席・名前・内部 ID・順位）。一覧が40件以上なら「上限が近い」、50件ちょうどで一番古い対局が未処理なら「取りこぼしたおそれ」と警告する
+- 一覧の `sub_tag` は牌譜の `config.mode.mode` と同じ値（2026-11-19 に60件で確認）。一の位が 1 なら東風、2 なら半荘。十の位は三麻とみられる（11・12）。4 の意味は未確認
+- 保存する牌譜: `RecordGame` の head（`fetchGameRecordsDetail` の `record_list` の1件、protobufjs の `toObject` の形）から、参加者の見た目の情報（`avatar_id`・`character`・`views`・`title`・`avatar_frame`）を外したもの。1件あたり json で約1.2KB（gzip で約0.55KB）。0 や空の項目は省かれる（席 0 の `seat` など）
+- 要求: ログインは1回の実行につき1回（`err=151` のやり直しを除く）。Lobby の要求の間は2秒。`fetchGameRecordsDetail` は50件ずつまとめる（50件まで1回で返ることを確認）。1回の実行で取る牌譜は100件まで
+- 2本目の接続（`jpgsbk`）は張らない。張らなくても一覧と牌譜は取れる（タスク 011・006）
+- Lambda（Node 22）で `.ts` を動かすためのバンドルは、タスク 010 で決める
 
 ## 旧集計（スプレッドシート。タスク 003 で記録）
 Web サービスに移す集計のルール（タスク 012）。シートの場所と、データの具体（件数・期間）は `docs/local/003-sheet-notes.md`。
@@ -204,6 +225,7 @@ pt は雀魂がサーバーで計算した値（`total_point`）で、GAS は計
   - Yostar の Token は端末ごとに管理されている（`/user/device-list`・`/user/remove-device`）。期限切れ（`100403`）になることもある。有効期間はタスク 009 で計測中
   - WebGL 版は、旧クライアントの liqi.json にない項目を送る（`oauth2Login` の `device` の中の `device_id` など）。WebGL 版の定義には載っていて、記録済みの要求はすべてバイト単位で再現できた（タスク 017）
 - 他人を指定できる主な要求: `searchAccountByEid`（表示 ID → 内部 ID）、`fetchAccountInfoExtra(account_id, category, type)`（`category` 1=四麻/2=三麻、`type` 1=段位戦/2=友人戦。最新50件、2024-08 ごろ以降）
+  - `fetchAccountInfoExtra` は、件数が50件に届かなくても 2024-08 ごろより前の記録を返さない（2026-11-20 に、本人の牌譜画面と比べて確認）。本人の一覧（`fetchGameRecordList` / `fetchNextGameRecordList`。相手を指定できない）は、それより前まで遡れる。新しい主催者の過去分の扱いはタスク 018
 
 ## 既知の注意点
 - 雀魂側のプロトコル・バージョン変更で動かなくなりうる（`majsoul.js` は 2024-11 の修正が最後）
