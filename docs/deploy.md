@@ -89,7 +89,7 @@ aws cloudfront create-invalidation --distribution-id $(terraform -chdir=infra ou
 - Function URL に直接要求すると 403（`aws lambda get-function-url-config --function-name jantama-ranking-api` で URL を出す）
 
 ## 注意・メモ
-- **OIDC の `sub` は不変 ID 付きの形式**（`repo:MethylSatan@<ownerID>/JantamaRanking@<repoID>:ref:refs/heads/master`）。`infra/variables.tf` の `github_repo_sub`。ID は `gh api repos/MethylSatan/JantamaRanking` の `owner.id` と `id`
+- **OIDC の `sub` は名前だけの形式**（`repo:MethylSatan/JantamaRanking:ref:refs/heads/master`）。word-flashcard（新しいリポジトリ）は不変 ID 付きの形式で、リポジトリごとに違う。ID 付きで書いたら「Not authorized to perform sts:AssumeRoleWithWebIdentity」になった（2026-11-20）。形式は `gh api repos/MethylSatan/JantamaRanking/actions/oidc/customization/sub` の `sub_claim_prefix` で確かめる。`infra/variables.tf` の `github_repo_sub`
 - デプロイを許すのは `master` ブランチだけ（`infra/variables.tf` の `deploy_branch`）
 - DynamoDB のテーブルと Cognito のユーザープールは削除保護を有効にしている。消すときは先に外す
 - 画面用のバケットもバージョニングを有効にしている（ランキングの JSON の過去の版を残すため）。sync のたびに古い版が残るが、量は小さい
