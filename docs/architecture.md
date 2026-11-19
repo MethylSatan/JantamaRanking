@@ -38,7 +38,7 @@ Lambda ──(L2、運営アカウント)──▶ 雀魂
   ├ 認証情報: SSM Parameter Store（SecureString）
   ├ データ: DynamoDB。牌譜の生 json は S3
   └ 定期取得: EventBridge Scheduler → Lambda
-運営の認証: Cognito のユーザープール（運営1人。API は JWT で守る）
+運営・主催者の認証: Cognito のユーザープール ← Discord（OIDC の IdP）。API は Cognito の JWT で守る
 ```
 
 ### 構成要素
@@ -48,6 +48,7 @@ Lambda ──(L2、運営アカウント)──▶ 雀魂
 | API（Lambda） | 候補の更新（雀魂から一覧を取る）、取り込み（選んだ対局の中身を取り、結果を保存し、ランキングを作り直す）、対象外にする操作 |
 | 定期取得 | 1日1回程度、登録した主催者の候補を更新する。一覧は種類ごとに最新50件なので、上限に達する前に取りこぼさないため |
 | 認証情報 | 運営アカウントの `code` / `uid`（と端末 ID）。取り直しはタスク 009 |
+| ログイン | 運営・主催者は Discord でログインする。Discord を Cognito の OIDC の IdP にし、画面は Cognito の Hosted UI へ移って認可コード＋PKCE でトークンを受け取る。スコープは `openid identify`（メールは求めない）。運営かどうかは Cognito のグループで持つ。操作ログには Cognito の `sub` を書き、Discord の ID・表示名との対応は別に持つ（本人の依頼で消せるように）。接続はタスク 020、主催者の本人確認と権限はタスク 021（`docs/decisions.md` 2026-11-20 タスク 014） |
 | Terraform | `infra/`。状態は `methylsatan-tfstate` の `jantama-ranking/terraform.tfstate`。Route 53 のゾーン、証明書（us-east-1）、GitHub の OIDC プロバイダーは word-flashcard のものを `data` で参照する。リソースの一覧・手順・OAC の注意は `docs/deploy.md` |
 
 ### データモデル（概要。実装で詰める）
@@ -71,7 +72,7 @@ Lambda ──(L2、運営アカウント)──▶ 雀魂
 
 ### 費用の見込み（東京）
 - CloudFront・WAF・Route 53: 定額の無料プランで $0（1アカウントで Free プランは3つまで。word-flashcard で1つ使用）
-- Lambda・DynamoDB・SSM（標準）・EventBridge Scheduler・Cognito: 恒常の無料枠に収まる見込み
+- Lambda・DynamoDB・SSM（標準）・EventBridge Scheduler・Cognito: 恒常の無料枠に収まる見込み（Cognito の Lite プランの OIDC 連携は月50 MAU まで無料）
 - S3（牌譜の json。バージョニングで古い版も残る）: 1円未満
 - DynamoDB のポイントインタイムリカバリ: $0.228/GB月（数 MB なら1円未満）
 - Lambda Function URL を配信元にしても、定額の無料プランに加入できた（2026-11-20、タスク 010）

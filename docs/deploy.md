@@ -16,7 +16,7 @@ Lambda → S3 jantama-ranking-data-<account>（牌譜の json、雀魂のバー�
        → DynamoDB jantama-ranking
        → SSM Parameter Store /jantama-ranking/*（認証情報・定義の鍵。値は手で入れる）
 EventBridge Scheduler jantama-ranking-daily → Lambda（1日1回。タスク 013 までは DISABLED）
-Cognito ユーザープール jantama-ranking（運営1人。自己登録なし。Lite プラン）
+Cognito ユーザープール jantama-ranking（運営1人。自己登録なし。Lite プラン。Discord ログインはタスク 020 で足す）
 ```
 - コードは `infra/`（Terraform）。状態は S3 の `methylsatan-tfstate`（word-flashcard と共有。キーは `jantama-ranking/terraform.tfstate`）
 - リージョンは `ap-northeast-1`。WAF だけ CloudFront の都合で `us-east-1`
@@ -47,7 +47,7 @@ Cognito ユーザープール jantama-ranking（運営1人。自己登録なし�
 | S3（2バケット、バージョニング） | $0.025/GB月 | 牌譜は年500局で約1MB。1円未満 |
 | CloudWatch Logs（Lambda のログ。30日で削除） | 取り込み $0.76/GB | 1円未満 |
 | EventBridge Scheduler | 月1,400万回まで無料 | $0 |
-| Cognito（Lite） | 運営1人 | 無料枠の範囲（未再確認。超えても1人分は $0.01 未満） |
+| Cognito（Lite） | 運営・主催者の数人。Discord からの OIDC 連携は月50 MAU まで無料、超えると $0.015/MAU（2026-11-20、タスク 014 で料金ページの要約を確認） | 無料枠の範囲 |
 | SSM Parameter Store（標準） | 無料 | $0 |
 
 合計の見込みは月数円以内。定価で見積もっても1円台〜数円で、Lambda・CloudWatch Logs などの恒常の無料枠に収まれば $0。
