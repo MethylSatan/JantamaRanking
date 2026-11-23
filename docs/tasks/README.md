@@ -24,7 +24,7 @@
 | [017](017-liqi-definition-tracking.md) | liqi の定義への追従 | 016 | done |
 | [018](018-new-host-history.md) | 新しい主催者の過去分の取り込み（優先度は最低） | 006 | todo |
 | [019](019-language-and-ui-stack.md) | 言語と画面の技術の選び直し | 008、012 | done |
-| [020](020-discord-login.md) | Discord ログインの接続 | 014 | todo |
+| [020](020-discord-login.md) | Discord ログインの接続 | 014 | doing |
 | [021](021-host-verification.md) | 主催者の本人確認と権限 | 020 | todo |
 
 ## 新しいタスクの作り方

@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <title>運営 | 友人戦ランキング</title>
+  <!-- タスク 020 の確認用の仮のページ。タスク 013 で運営の画面に置き換える -->
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; }
+    pre { background: #f4f4f4; padding: 0.75rem; overflow-x: auto; }
+    .error { color: #b00020; }
+  </style>
+</head>
+<body>
+  <h1>運営</h1>
+  <p id="status">ログインしていません。</p>
+  <p><button id="login">Discord でログイン</button> <button id="logout" hidden>ログアウト</button></p>
+  <pre id="claims" hidden></pre>
+  <p><a href="privacy.html">プライバシーポリシー</a></p>
+
+  <script type="module">
+    // Cognito のアプリクライアント（秘密ではない）と、ログイン画面のドメイン（terraform output の user_pool_client_id / auth_domain）
+    const CLIENT_ID = '5f11ktadqh8u5sfeej8r3j5k2v';
+    const AUTH_ORIGIN = 'https://jantama-ranking-auth.methylsatan.com';
+    const REDIRECT_URI = location.origin + location.pathname;
+
+    const $ = (id) => document.getElementById(id);
+    const b64url = (bytes) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const randomString = () => b64url(crypto.getRandomValues(new Uint8Array(32)));
+    const sha256 = async (text) => new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)));
+    const decodeJwt = (jwt) => JSON.parse(new TextDecoder().decode(
+      Uint8Array.from(atob(jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0))));
+
+    function showError(message) {
+      $('status').textContent = message;
+      $('status').className = 'error';
+    }
+
+    function showTokens(tokens) {
+      const claims = decodeJwt(tokens.id_token);
+      $('status').textContent = 'ログインしています。';
+      $('claims').hidden = false;
+      $('claims').textContent = JSON.stringify({
+        sub: claims.sub,
+        'cognito:username': claims['cognito:username'],
+        'cognito:groups': claims['cognito:groups'] ?? [],
+        identities: claims.identities,
+        exp: new Date(claims.exp * 1000).toLocaleString('ja-JP'),
+      }, null, 2);
+      $('login').hidden = true;
+      $('logout').hidden = false;
+    }
+
+    $('login').onclick = async () => {
+      const verifier = randomString();
+      const state = randomString();
+      sessionStorage.setItem('pkce', JSON.stringify({ verifier, state }));
+      const params = new URLSearchParams({
+        response_type: 'code',
+        client_id: CLIENT_ID,
+        redirect_uri: REDIRECT_URI,
+        identity_provider: 'Discord',
+        scope: 'openid',
+        state,
+        code_challenge: b64url(await sha256(verifier)),
+        code_challenge_method: 'S256',
+      });
+      location.assign(`${AUTH_ORIGIN}/oauth2/authorize?${params}`);
+    };
+
+    $('logout').onclick = () => {
+      sessionStorage.removeItem('tokens');
+      const params = new URLSearchParams({ client_id: CLIENT_ID, logout_uri: location.origin + '/' });
+      location.assign(`${AUTH_ORIGIN}/logout?${params}`);
+    };
+
+    async function handleRedirect() {
+      const query = new URLSearchParams(location.search);
+      if (!query.has('code') && !query.has('error')) return false;
+      history.replaceState(null, '', location.pathname);
+      if (query.has('error')) {
+        showError(`ログインできませんでした: ${query.get('error_description') ?? query.get('error')}`);
+        return true;
+      }
+      const saved = JSON.parse(sessionStorage.getItem('pkce') ?? 'null');
+      sessionStorage.removeItem('pkce');
+      if (!saved || saved.state !== query.get('state')) {
+        showError('ログインできませんでした: 状態が一致しません。やり直してください。');
+        return true;
+      }
+      const res = await fetch(`${AUTH_ORIGIN}/oauth2/token`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'authorization_code',
+          client_id: CLIENT_ID,
+          code: query.get('code'),
+          redirect_uri: REDIRECT_URI,
+          code_verifier: saved.verifier,
+        }),
+      });
+      if (!res.ok) {
+        showError(`トークンを受け取れませんでした（${res.status}）: ${await res.text()}`);
+        return true;
+      }
+      const tokens = await res.json();
+      sessionStorage.setItem('tokens', JSON.stringify(tokens));
+      showTokens(tokens);
+      return true;
+    }
+
+    try {
+      if (!(await handleRedirect())) {
+        const tokens = JSON.parse(sessionStorage.getItem('tokens') ?? 'null');
+        if (tokens) showTokens(tokens);
+      }
+    } catch (e) {
+      showError(`エラー: ${e.message}`);
+    }
+  </script>
+</body>
+</html>

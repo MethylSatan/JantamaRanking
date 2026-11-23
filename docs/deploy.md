@@ -16,7 +16,10 @@ Lambda → S3 jantama-ranking-data-<account>（牌譜の json、雀魂のバー�
        → DynamoDB jantama-ranking
        → SSM Parameter Store /jantama-ranking/*（認証情報・定義の鍵。値は手で入れる）
 EventBridge Scheduler jantama-ranking-daily → Lambda（1日1回。タスク 013 までは DISABLED）
-Cognito ユーザープール jantama-ranking（運営1人。自己登録なし。Lite プラン。Discord ログインはタスク 020 で足す）
+Cognito ユーザープール jantama-ranking（Lite プラン。ログインは Discord だけ。自己登録なし）
+  ├ ログイン画面（Hosted UI）: jantama-ranking-auth.methylsatan.com（Cognito が立てる CloudFront。Route 53 の ALIAS）
+  ├ IdP: Discord（OIDC）
+  └ pre sign-up: Lambda jantama-ranking-presignup（許可した Discord の ID だけ利用者を作る。一覧は SSM /jantama-ranking/allowed-discord-ids）
 ```
 - コードは `infra/`（Terraform）。状態は S3 の `methylsatan-tfstate`（word-flashcard と共有。キーは `jantama-ranking/terraform.tfstate`）
 - リージョンは `ap-northeast-1`。WAF だけ CloudFront の都合で `us-east-1`
@@ -61,16 +64,47 @@ Cognito ユーザープール jantama-ranking（運営1人。自己登録なし�
 
 ## 初回の構築手順
 前提: `terraform`（1.10 以上）と `aws` CLI v2 を入れ、`aws login` でログインしておく。AWS 側は管理者相当の権限が要る。状態用バケット・Route 53 のゾーン・証明書・OIDC プロバイダーは、word-flashcard の手順で作り済みであること。
-1. `cd infra && terraform init && terraform apply`。定額プランへの加入も含まれる（`plan.tf`）。`terraform state show aws_pricingplanmanager_subscription.site` で `status = ACTIVE`、`plan_tier = FREE` を確認する
-2. GitHub のシークレットを設定する。値は秘密情報ではないが、公開リポジトリでは Actions のログを誰でも見られるので、アカウント ID がログに出ないようシークレットにする（word-flashcard は非公開なので変数）
+1. Discord の開発者ポータル（https://discord.com/developers/applications）で Application を作る。OAuth2 の画面で Client ID を控え（`infra/variables.tf` の既定値にする）、Client Secret を発行して SSM に入れる（下の「Discord の Client Secret」。リポジトリにも `docs/local/` にも書かない）。Public Client はオフのまま。Redirects に `https://jantama-ranking-auth.methylsatan.com/oauth2/idpresponse` を足す。Bot・Installation・OAuth2 URL Generator は使わない
+2. 許可の一覧を SSM に作る。最初は誰も入れない値にしておき、弾かれることを確かめてから自分の ID を入れる（下の「ログインの許可」）
+   ```
+   aws ssm put-parameter --name /jantama-ranking/allowed-discord-ids --type StringList --value none
+   ```
+3. `cd infra && terraform init && terraform apply`。定額プランへの加入も含まれる（`plan.tf`）。`terraform state show aws_pricingplanmanager_subscription.site` で `status = ACTIVE`、`plan_tier = FREE` を確認する
+4. GitHub のシークレットを設定する。値は秘密情報ではないが、公開リポジトリでは Actions のログを誰でも見られるので、アカウント ID がログに出ないようシークレットにする（word-flashcard は非公開なので変数）
    ```
    gh secret set AWS_DEPLOY_ROLE_ARN --body "$(terraform -chdir=infra output -raw deploy_role_arn)"
    gh secret set SITE_BUCKET --body "$(terraform -chdir=infra output -raw bucket)"
    gh secret set CLOUDFRONT_DISTRIBUTION_ID --body "$(terraform -chdir=infra output -raw distribution_id)"
    gh secret set API_FUNCTION_NAME --body "$(terraform -chdir=infra output -raw function_name)"
    ```
-3. master に push する（または Actions の `deploy` を手動実行）
-4. 運営のユーザーと SSM の値を手で入れる（タスク 013 で手順を足す）
+5. master に push する（または Actions の `deploy` を手動実行）
+6. Discord の開発者ポータルの General Information に、Privacy Policy URL（`https://jantama-ranking.methylsatan.com/privacy.html`）を入れる（Discord の開発者向けの規約で必要）
+7. 運営として Discord でログインし、`operators` グループに入れる（下の「ログインの許可」）
+8. 雀魂の運営アカウントの認証情報と定義の鍵を SSM に入れる（タスク 013 で手順を足す）
+
+### Discord の Client Secret
+**tfstate に入れない。** secret が漏れると、アプリの持ち主（運営）の Discord アカウントのトークンを、`client_credentials` で取られうる（`docs/decisions.md` 2026-11-23 タスク 020）。
+- secret は SSM の SecureString `/jantama-ranking/discord-client-secret` に手で入れる。シェルの履歴に残さないよう、`read -s` で入れる
+  ```
+  read -rs SECRET && aws ssm put-parameter --name /jantama-ranking/discord-client-secret --type SecureString --value "$SECRET" --overwrite; unset SECRET
+  ```
+- Cognito の IdP「Discord」は、`terraform apply` のときに `infra/scripts/discord-idp.sh` が SSM から secret を読んで作る（あれば更新する）。Terraform のリソースにはしない（`aws_cognito_identity_provider` に tfstate に残らない書き方がないため）。手元に `aws` CLI と `python3` が要る
+- secret を変えたら（Discord の「Reset Secret」の後など）、SSM を上書きしてから `terraform -chdir=infra apply -replace=terraform_data.discord_idp`
+- Client ID は秘密ではないので、`infra/variables.tf` の既定値に置いている
+
+### ログインの許可
+- 自分の Discord の ID は、Discord の設定で開発者モードをオンにし、自分のアイコンの右クリック →「ユーザー ID をコピー」で得る
+- 許可の一覧はカンマ区切りで上書きする。一覧が効くのは初回のログイン（Cognito の利用者ができるとき）だけ
+  ```
+  aws ssm put-parameter --name /jantama-ranking/allowed-discord-ids --type StringList --value <ID>,<ID> --overwrite
+  ```
+- 初回のログインで利用者ができたら、運営をグループに入れる。利用者名は `Discord_<Discord の ID>` の形（タスク 020 で確認）
+  ```
+  aws cognito-idp admin-add-user-to-group --user-pool-id $(terraform -chdir=infra output -raw user_pool_id) --username <利用者名> --group-name operators
+  ```
+  グループはトークンに入るので、入れた後はログインし直す。連携の利用者は、Cognito が自動で作る `<ユーザープール ID>_Discord` のグループにも入る（運営の判定には使わない）
+- 手元でログインを確かめるときは、`python3 -I -m http.server 5173 --bind 127.0.0.1 -d web/public` を立て、Windows のブラウザで `http://localhost:5173/admin.html` を開く（VS Code の中のブラウザはアドレスが変わり、`redirect_mismatch` になる）
+- 許可を取り消すときは、一覧から外し、`aws cognito-idp admin-delete-user` で利用者を消す（Discord の規約: 不要になったデータは消す）
 
 ## 普段のデプロイ
 master に push するだけ（`.github/workflows/deploy.yml`）。手で出すときは、リポジトリ直下で:
@@ -94,3 +128,4 @@ aws cloudfront create-invalidation --distribution-id $(terraform -chdir=infra ou
 - DynamoDB のテーブルと Cognito のユーザープールは削除保護を有効にしている。消すときは先に外す
 - 画面用のバケットもバージョニングを有効にしている（ランキングの JSON の過去の版を残すため）。sync のたびに古い版が残るが、量は小さい
 - Lambda の環境変数: `DATA_BUCKET`、`TABLE_NAME`、`SSM_PREFIX`（`/jantama-ranking/`）
+- **`methylsatan.com`（apex）の A レコードはこのリポジトリで作っている**（`infra/shared.tf`。値は到達しない文書用のアドレス `192.0.2.1`）。Cognito の独自ドメインが、親ドメインに A レコードがあることを求めるため。ゾーンは共有のリソースなので、ほかのリポジトリでは apex の A レコードを作らない（2026-11-23、タスク 020）

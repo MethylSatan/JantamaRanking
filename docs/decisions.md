@@ -179,3 +179,15 @@
   理由: 規約は、必要な範囲のデータだけを扱うことを求める。誰でもログインできると、関係のない人のデータが残る。
 - **主催者の本人確認（雀魂のアカウントとの対応づけ）と、Discord サーバーのロールでの権限づけは後回しにする（タスク 021）**
   理由: ユーザーの判断。当面ログインして操作するのは運営だけ。
+
+## 2026-11-23（タスク 020）
+- **Discord の Client Secret は tfstate に入れない。SSM の SecureString（`/jantama-ranking/discord-client-secret`）に手で入れ、Cognito の IdP「Discord」は `terraform apply` の中でスクリプト（`infra/scripts/discord-idp.sh`）が作る・更新する。Terraform のリソースにはしない**
+  理由: Discord の OAuth2 の文書によると、Client ID と Client Secret だけで `client_credentials` を送ると、アプリの持ち主のアクセストークンが返る。個人が持つアプリでは、`email`・`connections`・`guilds` などのスコープを付けられるとみられ、漏れると運営の Discord アカウントの情報を読まれうる（Team が持つアプリは `identify` などに限られるが、ユーザーの判断で Team にはしない）。Terraform の AWS プロバイダーの `aws_cognito_identity_provider` には tfstate に残らない書き方（write-only）がなく、`provider_details` は sensitive でもない（2026-11-23、プロバイダーの定義で確認）。secret はコマンドの引数に載せず、権限を絞った一時ファイルで AWS CLI に渡す。
+- **ログインは Discord だけにし、メールとパスワード（SRP）は外す**
+  理由: ユーザーの判断。運営のメールの利用者はまだ作っていない。Discord が止まったときは、設定を戻せば使える。
+- **Cognito のログイン画面は独自ドメイン `jantama-ranking-auth.methylsatan.com` にする。そのため `methylsatan.com`（apex）に A レコード（到達しない文書用のアドレス `192.0.2.1`）を足す**
+  理由: Cognito の独自ドメインは、親ドメインに A レコードがあることを求める。apex には A レコードがなかった（2026-11-23 に DNS で確認）。1階層の名前にすれば手持ちのワイルドカード証明書を使え、CT ログにサービス名が載らない（2階層は新しい証明書が要り、名前が載る）。ゾーンは共有のリソースという位置づけなので、apex のレコードをこのリポジトリで作ってよい（ユーザーの判断）。認証のドメインがサービスと別のホスト名になるのは Cognito の仕組み上必須で、どちらも `methylsatan.com` の下なので Cookie の制限には当たらない。
+- **許可していない Discord の ID では、Cognito の利用者を作らない。許可の一覧は SSM の StringList（`/jantama-ranking/allowed-discord-ids`）に手で入れ、pre sign-up のトリガー（`infra/lambda/presignup/`）が見る**
+  理由: Discord の規約は必要なデータだけを扱うことを求める。ID をリポジトリに書かない。トリガーは小さく変更も少ないので、API の Lambda と違って Terraform が載せる。
+- **プライバシーポリシー（`web/public/privacy.html`）の連絡先は、運営の X と Discord**
+  理由: ユーザーの判断。Discord の規約が、プライバシーポリシーと、削除の依頼・問題の報告の窓口を求める。

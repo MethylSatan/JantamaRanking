@@ -29,3 +29,7 @@ output "user_pool_client_id" {
 output "url" {
   value = "https://${local.fqdn}"
 }
+
+output "auth_domain" {
+  value = local.auth_fqdn
+}

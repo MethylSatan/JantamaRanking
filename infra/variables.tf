@@ -28,4 +28,20 @@ variable "deploy_branch" {
 locals {
   name = "jantama-ranking"
   fqdn = "${var.subdomain}.${var.zone_name}"
+  # Cognito のログイン画面（Hosted UI）のドメイン
+  auth_fqdn = "${var.auth_subdomain}.${var.zone_name}"
+}
+
+# Discord の開発者ポータルで作った Application の Client ID（秘密ではない。ログインの URL にも出る）。
+# Client Secret は Terraform に渡さない（SSM /jantama-ranking/discord-client-secret。auth.tf）
+variable "discord_client_id" {
+  description = "Discord の Application の Client ID"
+  type        = string
+  default     = "1574154884524146850"
+}
+
+variable "auth_subdomain" {
+  description = "Cognito のログイン画面のサブドメイン（ワイルドカード証明書が使えるよう1階層にする）"
+  type        = string
+  default     = "jantama-ranking-auth"
 }
