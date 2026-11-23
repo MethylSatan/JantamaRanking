@@ -1,6 +1,6 @@
 # 020 Discord ログインの接続
 
-状態: doing / 依存: 014
+状態: done / 依存: 014
 
 ## 目的
 運営と主催者が Discord でログインできるようにする。Discord を Cognito のユーザープールに OIDC の IdP としてつなぎ、画面から Hosted UI 経由でログインして、Cognito の JWT を受け取れることを確かめる（`docs/decisions.md` 2026-11-20 タスク 014）。
@@ -46,5 +46,7 @@
   - **連携の利用者は、Cognito が自動で作る IdP ごとのグループ（`<ユーザープール ID>_Discord`）にも入る。** 運営かどうかは「グループがあるか」ではなく「`operators` があるか」で決める
   - VS Code の中のブラウザで開くと、ページのアドレスが `localhost` 以外になり、Cognito が `redirect_mismatch` で止まる。Windows のブラウザで `http://localhost:5173/admin.html` を開く
   - 5173 番は word-flashcard の Vite の開発サーバーと重なる。手元の確認では、そちらを止めてから `python3 -I -m http.server 5173 --bind 127.0.0.1 -d web/public`
+  - 本番（`https://jantama-ranking.methylsatan.com/admin.html`）でも、ログインして `cognito:groups` に `operators` が入ることを確かめた。Discord の開発者ポータルに Privacy Policy URL（`/privacy.html`）を登録した
+  - メールとパスワードを残すかは、外すと決めた（`docs/decisions.md` 2026-11-23）
 - タスク 013 の API は、この JWT を `x-auth-token` ヘッダーで受けて検証する（OAC が `Authorization` を上書きするため。`docs/deploy.md`）
 - Cognito の Lite プランでは、ログイン画面は旧来の Hosted UI。OIDC 連携は月50 MAU まで無料
