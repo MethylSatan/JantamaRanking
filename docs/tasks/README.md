@@ -17,7 +17,7 @@
 | [010](010-aws-infra.md) | AWS 基盤（Terraform とデプロイ） | 008、011 | done |
 | [011](011-lambda-majsoul-connectivity.md) | Lambda から雀魂に接続できるかの確認 | 007、008 | done |
 | [012](012-ranking-rules.md) | 集計ルールの移植 | 003 | done |
-| [013](013-web-ui.md) | Web サービスの画面と API | 006、010、012、020 | todo |
+| [013](013-web-ui.md) | Web サービスの画面と API | 006、010、012、020、022 | todo |
 | [014](014-x-login.md) | X ログインの調査（主催者への開放。Discord に決定） | - | done |
 | [015](015-legacy-data-migration.md) | 旧方式の牌譜（Drive）の移行 | 012、013 | todo |
 | [016](016-client-version-tracking.md) | 雀魂のバージョンへの追従 | 011 | done |
@@ -25,7 +25,8 @@
 | [018](018-new-host-history.md) | 新しい主催者の過去分の取り込み（優先度は最低） | 006 | todo |
 | [019](019-language-and-ui-stack.md) | 言語と画面の技術の選び直し | 008、012 | done |
 | [020](020-discord-login.md) | Discord ログインの接続 | 014 | done |
-| [021](021-host-verification.md) | 主催者の本人確認と権限 | 020 | todo |
+| [021](021-host-verification.md) | 主催者の本人確認 | 020、022 | todo |
+| [022](022-authorization-design.md) | 権限の設計 | 020 | todo |
 
 ## 新しいタスクの作り方
 - ファイル名は `NNN-短い名前.md`（連番）。この表にも行を足す
