@@ -6,9 +6,11 @@
   "scripts": {
     "test": "node --test 'src/**/*.test.ts'",
     "typecheck": "tsc -p .",
-    "build:api": "esbuild src/api/handler.ts --bundle --platform=node --target=node24 --format=esm --outfile=dist/api/index.mjs"
+    "build:api": "esbuild src/api/handler.ts --bundle --platform=node --target=node24 --format=esm --outfile=dist/api/index.mjs --external:@aws-sdk/*"
   },
   "devDependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1176.0",
+    "@aws-sdk/lib-dynamodb": "^3.1176.0",
     "@types/node": "^24.19.2",
     "@types/ws": "^8.18.2",
     "esbuild": "^0.28.2",

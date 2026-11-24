@@ -38,6 +38,8 @@ Cognito ユーザープール jantama-ranking（Lite プラン。ログインは
 - **POST・PUT では、ブラウザが本文の SHA-256（16進）を `x-amz-content-sha256` ヘッダーに付けて送る。** 付けないと署名が合わず失敗する
 - `/api/*` のキャッシュは `Managed-CachingDisabled`。配信元へは `Managed-AllViewerExceptHostHeader` で、Host 以外のヘッダー・クエリ・Cookie を渡す
 - Lambda はパスを `/api/...` のまま受け取る（`rawPath`）
+- `x-auth-token` に入れるのは Cognito の**アクセストークン**（ID トークンではない。`token_use=access` を確かめる）
+- AWS SDK はバンドルせず、Lambda のランタイムのものを使う（`build:api` の `--external:@aws-sdk/*`）
 
 ## 費用（東京、2026-11-20 に AWS の Price List API と料金ページで確認）
 | もの | 単価 | 見込み |
@@ -127,5 +129,5 @@ aws cloudfront create-invalidation --distribution-id $(terraform -chdir=infra ou
 - デプロイを許すのは `master` ブランチだけ（`infra/variables.tf` の `deploy_branch`）
 - DynamoDB のテーブルと Cognito のユーザープールは削除保護を有効にしている。消すときは先に外す
 - 画面用のバケットもバージョニングを有効にしている（ランキングの JSON の過去の版を残すため）。sync のたびに古い版が残るが、量は小さい
-- Lambda の環境変数: `DATA_BUCKET`、`TABLE_NAME`、`SSM_PREFIX`（`/jantama-ranking/`）
+- Lambda の環境変数: `DATA_BUCKET`、`TABLE_NAME`、`SSM_PREFIX`（`/jantama-ranking/`）、`USER_POOL_ID`・`USER_POOL_CLIENT_ID`（アクセストークンの検証）
 - **`methylsatan.com`（apex）の A レコードはこのリポジトリで作っている**（`infra/shared.tf`。値は到達しない文書用のアドレス `192.0.2.1`）。Cognito の独自ドメインが、親ドメインに A レコードがあることを求めるため。ゾーンは共有のリソースなので、ほかのリポジトリでは apex の A レコードを作らない（2026-11-23、タスク 020）

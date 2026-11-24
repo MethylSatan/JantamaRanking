@@ -49,6 +49,9 @@ resource "aws_lambda_function" "api" {
       DATA_BUCKET = aws_s3_bucket.data.bucket
       TABLE_NAME  = aws_dynamodb_table.main.name
       SSM_PREFIX  = "/${local.name}/"
+      # x-auth-token の Cognito のアクセストークンを確かめる（発行者と client_id）
+      USER_POOL_ID        = aws_cognito_user_pool.main.id
+      USER_POOL_CLIENT_ID = aws_cognito_user_pool_client.web.id
     }
   }
 
@@ -116,6 +119,8 @@ data "aws_iam_policy_document" "api" {
     actions = [
       "dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem",
       "dynamodb:Query", "dynamodb:BatchGetItem", "dynamodb:BatchWriteItem",
+      # TransactWriteItems は中の操作ごとの許可で判断される。条件だけの項目に ConditionCheckItem が要る
+      "dynamodb:ConditionCheckItem",
     ]
     resources = [aws_dynamodb_table.main.arn, "${aws_dynamodb_table.main.arn}/index/*"]
   }

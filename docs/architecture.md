@@ -77,23 +77,25 @@ DynamoDB のテーブルは `pk`/`sk` のまま、GSI は足さない。件数�
 - 牌譜（head）は data バケットの `records/<牌譜 uuid>.json` に置く（ランキングをまたいで1つ）。作り直しは、取り込み済みの uuid ごとに S3 の牌譜から `GameResult` を作り直す
 - ランキングの JSON: 取り込みのたびに作り直し、site バケットの `rankings/<公開 ID>.json` に置いて CloudFront から配る（閲覧で Lambda を動かさない）。公開 ID はランキング ID と別の推測されない値にし、取り直せるようにする。取り直したときの古い JSON の扱いはタスク 025 で決める（今の IAM に `DeleteObject` は無い）
 
-### API（案。タスク 024・025 で実装しながら詰める）
+### API（024 の分は実装済み。025 の分は案）
 | 要求 | 内容 |
 |---|---|
-| `GET /api/me` | sub、Admin か、操作の許可の表（画面がボタンを出し分ける） |
-| `GET` / `POST /api/rankings` | ランキングの一覧（Admin は全部、Host は付いているもの）・作成 |
-| `GET` / `PATCH` / `DELETE /api/rankings/{id}` | 取得・名前の変更・削除（非公開にする） |
-| `PUT` / `DELETE /api/rankings/{id}/accounts/{表示用 ID}` | 雀魂アカウントの指定・外す |
+| `GET /api/me` | sub、Admin か、操作の許可の表（`src/api/authorize.ts` の `PERMISSIONS`。画面がボタンを出し分ける） |
+| `GET` / `POST /api/rankings` | ランキングの一覧（Admin は全部、Host は付いているもの。削除したものも状態付きで出す）・作成（`{name}`、1〜100文字） |
+| `GET` / `PATCH` / `DELETE /api/rankings/{id}` | 取得（雀魂アカウントの一覧と、どの役割で許したか `via` を含む）・名前の変更（`{name}`）・削除（非公開にする） |
+| `PUT` / `DELETE /api/rankings/{id}/accounts/{表示用 ID}` | 雀魂アカウントの指定・外す（表示用 ID は数字だけ。何度呼んでも同じ結果。変わったときだけ操作ログに書く） |
 | `GET /api/rankings/{id}/games?state=candidate\|imported\|excluded` | 対局の一覧 |
 | `POST /api/rankings/{id}/refresh` | 候補の更新（ジョブ） |
 | `POST /api/rankings/{id}/import` | 取り込み（牌譜 uuid の配列。ジョブ） |
 | `POST /api/rankings/{id}/rebuild` | 牌譜からの作り直し（ジョブ） |
 | `POST /api/rankings/{id}/games/{uuid}/exclude` / `restore` | 対象外にする・戻す（すぐ終わる。ランキングの JSON を作り直す） |
 | `POST /api/rankings/{id}/public-id` | 公開 ID の取り直し |
-| `GET /api/rankings/{id}/logs` | 操作ログ |
+| `GET /api/rankings/{id}/logs` | 操作ログ（新しい順に100件） |
 | `GET /api/jobs/{id}` | ジョブの状態 |
 
-- 認証は `x-auth-token` ヘッダーの Cognito の JWT（`docs/deploy.md`「API と OAC」）。判断は `authorize()`（下の「権限（タスク 022）」）
+- 認証は `x-auth-token` ヘッダーの Cognito のアクセストークン（`docs/deploy.md`「API と OAC」）。`src/api/jwt.ts` が署名（RS256、JWKS）・発行者・`token_use=access`・`client_id`・期限を確かめる。判断は `authorize()`（下の「権限（タスク 022）」）
+- 応答: トークンが無い・正しくない 401、表で許されない 403、ランキングが無い・付いていない 404、入力の誤り 400
+- 利用者の情報（`USER#<sub>` / `PROFILE`）は 024 では書かない。アクセストークンに Discord の ID・名前が無く、使うのは Host の付け外し（タスク 023）なので、023 で決める
 
 ### 非同期の処理（タスク 025）
 雀魂への要求は CloudFront の応答待ち（既定30秒）を超えうるので、ジョブにする。
@@ -136,6 +138,7 @@ DynamoDB のテーブルは `pk`/`sk` のまま、GSI は足さない。件数�
 | 操作 | Admin | Host |
 |---|---|---|
 | ランキングの作成 | ○ | ― |
+| ランキングの閲覧（管理の画面で。雀魂アカウントの一覧を含む） | ○ | ○ |
 | ランキングの雀魂アカウントの指定・変更 | ○ | ○ |
 | ランキングの名前の変更 | ○ | ○ |
 | ランキングの削除（非公開にする。データは消さない） | ○ | ― |
@@ -172,7 +175,7 @@ DynamoDB のテーブルは `pk`/`sk` のまま、GSI は足さない。件数�
 
 #### API での判断
 - 権限の判断は1か所にまとめる: `authorize(利用者, 操作, ランキング ID)`。利用者は JWT から取った `sub` と `cognito:groups`。結果は「許可（どの役割で許したか: `admin` / `host`）」か「拒否」
-- 操作の種類と、それを許す役割の表は、コードの中で上の「操作ごとの許可」と同じ形の1つの表にする。画面はこの表を API から受け取り、できない操作のボタンを出さない（判断は必ず API で行う）
+- 操作の種類と、それを許す役割の表は、コードの中で上の「操作ごとの許可」と同じ形の1つの表にする（`src/api/authorize.ts` の `PERMISSIONS`。`authorize.test.ts` が文書と同じかを確かめる）。画面はこの表を API から受け取り、できない操作のボタンを出さない（判断は必ず API で行う）
 - 操作ログには、操作した人の `sub` と、どの役割で許したか（`via`）を書く。Host の付け外しも操作ログに書く
 
 #### 付け外しの流れ

@@ -23,3 +23,4 @@
 - ある Host が、付いていないランキングを見たり操作したりできないことを、テストで確かめている
 
 ## メモ
+- タスク 024 からの申し送り: 利用者の情報（`USER#<sub>` / `PROFILE`。Discord の ID・表示名）はまだ書いていない。アクセストークンには Discord の ID・名前が無いので、書くなら ID トークンを API に送ってもらうか、Cognito の `AdminGetUser` で引く（`docs/decisions.md` 2026-11-25 タスク 024）。Host の付け外しの API も無い（Host の項目を読む道は `src/api/authorize.ts` にある）
