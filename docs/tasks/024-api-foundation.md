@@ -1,6 +1,6 @@
 # 024 API の土台（認証・権限・ランキングの管理）
 
-状態: todo / 依存: 020、022（親: 013）
+状態: done / 依存: 020、022（親: 013）
 
 ## 目的
 雀魂に要求しない部分の API を作る。ログインした利用者を確かめ、`authorize()` で判断し、ランキングと雀魂アカウントの指定を DynamoDB に持ち、操作ログを残す。025（取り込み）と 026（管理の画面）の土台にする。
@@ -25,3 +25,7 @@
 
 ## メモ
 - 2026-11-25 に 013 から分けた（`docs/decisions.md` 2026-11-25 タスク 013 の分割）
+- 2026-11-25 実装・デプロイ。`src/api/` に `handler.ts`（入口）・`routes.ts`（各 API）・`jwt.ts`（アクセストークンの検証）・`authorize.ts`（`PERMISSIONS` と `authorize()`）・`store.ts`（DynamoDB）・`memory-store.ts`（テスト用）。Lambda の環境変数に `USER_POOL_ID`・`USER_POOL_CLIENT_ID`、IAM に `dynamodb:ConditionCheckItem` を足した
+- 決めたこと（`docs/decisions.md` 2026-11-25 タスク 024）: アクセストークンを使う、JWT は `node:crypto` で自前に検証、利用者の情報（`PROFILE`）は 023 で決める、表に「ランキングの閲覧」を足す、AWS SDK はランタイムのもの
+- 本番の確認: Admin のトークンで `/api/me`、作成・改名・アカウントの指定と外す・削除・一覧・操作ログを呼び、すべて期待どおり（操作ログに `sub` と `via: admin`）。トークン無し・壊れたトークンは 401。Admin でない利用者の本番アカウントは無いので、403・404 はテスト（`authorize.test.ts`、`handler.test.ts`）で確かめた。確認で作ったランキングは削除（非公開）の状態で残してある
+- 025 への申し送り: 新しい操作は `routes.ts` の表に足し、`authorize(user, op, id, store)` を通す。ジョブの API（202）とロックの項目は未実装。`DynamoStore` に項目を足すときは `MemoryStore` にも足す

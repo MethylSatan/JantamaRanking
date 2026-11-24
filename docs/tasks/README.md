@@ -28,7 +28,7 @@
 | [021](021-host-verification.md) | 主催者の本人確認（行わないと決定） | 020、022 | done |
 | [022](022-authorization-design.md) | 権限の設計 | 020 | done |
 | [023](023-open-to-hosts.md) | 主催者への開放（Host の付け外しと許可の一覧） | 013、022 | todo |
-| [024](024-api-foundation.md) | API の土台（認証・権限・ランキングの管理） | 020、022 | todo |
+| [024](024-api-foundation.md) | API の土台（認証・権限・ランキングの管理） | 020、022 | done |
 | [025](025-refresh-and-import.md) | 候補の更新と取り込み（雀魂への要求） | 024、006、012 | todo |
 | [026](026-admin-ui.md) | 管理の画面 | 024、025 | todo |
 | [027](027-viewer-ui.md) | 閲覧者の画面 | 025、026 | todo |
