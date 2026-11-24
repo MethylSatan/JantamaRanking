@@ -21,3 +21,5 @@
 
 ## メモ
 - 2026-11-25 に 013 から分けた（`docs/decisions.md` 2026-11-25 タスク 013 の分割）
+- 2026-11-25 タスク 025 からの申し送り: ランキングの JSON は `rankings/<公開 ID>.json`、形は `{ version: 1, name, generatedAt, games: GameResult[] }`（取り込み済みの対局だけ。`docs/architecture.md`「データモデル」）。集計は画面で `src/ranking` の `aggregate`・`playedThisMonth`・`notPlayedThisMonth` を使う。CloudFront の都合で、更新の反映は最大1秒ほど遅れる。削除（非公開）や公開 ID の取り直しの後は、古い URL が 403 になる
+

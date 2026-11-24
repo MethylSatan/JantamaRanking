@@ -156,6 +156,20 @@ async function publicJson(publicId: string) {
   return { status: res.status, json: res.ok ? ((await res.json()) as { name: string; games: { uuid: string }[] }) : undefined };
 }
 
+type PublicJson = Awaited<ReturnType<typeof publicJson>>;
+
+/** CloudFront は no-cache でも最短1秒は覚える（Managed-CachingOptimized の最小 TTL）。条件を満たすまで10秒まで読み直す */
+async function eventually(publicId: string, ok: (r: PublicJson) => boolean): Promise<PublicJson> {
+  const deadline = Date.now() + 10_000;
+  for (;;) {
+    const r = await publicJson(publicId);
+    if (ok(r) || Date.now() > deadline) return r;
+    await new Promise((res) => setTimeout(res, 1000));
+  }
+}
+
+const sameGames = (a: PublicJson, b: PublicJson) => JSON.stringify(a.json?.games) === JSON.stringify(b.json?.games);
+
 async function flow(eid: string | undefined, countArg: string | undefined) {
   if (!eid || !/^\d+$/.test(eid)) throw new Error('使い方: flow <表示用ID> [取り込む件数]');
   const count = Number(countArg ?? '1');
@@ -191,30 +205,31 @@ async function flow(eid: string | undefined, countArg: string | undefined) {
     console.log('ok  取り込み');
 
     const ranking = (await api(token, 'GET', base)).body;
-    const first = await publicJson(ranking.publicId);
+    const first = await eventually(ranking.publicId, (r) => r.status === 200);
     assert.equal(first.status, 200);
     assert.deepEqual(first.json!.games.map((g) => g.uuid).sort(), [...picked].sort());
     console.log(`ok  ランキングの JSON（${SITE}/rankings/<公開 ID>.json）に${first.json!.games.length}件`);
 
     const target = picked[0]!;
     assert.equal((await api(token, 'POST', `${base}/games/${target}/exclude`)).body.game.state, 'excluded');
-    assert.ok(!(await publicJson(ranking.publicId)).json!.games.some((g) => g.uuid === target));
+    const excluded = await eventually(ranking.publicId, (r) => !r.json?.games.some((g) => g.uuid === target));
+    assert.ok(!excluded.json!.games.some((g) => g.uuid === target), '対象外にした対局が JSON に残っている');
     assert.equal((await api(token, 'POST', `${base}/games/${target}/restore`)).body.game.state, 'imported');
-    assert.deepEqual((await publicJson(ranking.publicId)).json!.games, first.json!.games);
+    assert.ok(sameGames(await eventually(ranking.publicId, (r) => sameGames(r, first)), first), '戻したあとの JSON が元と違う');
     console.log('ok  対象外にすると JSON から外れ、戻すと入る');
 
     const rb = await api(token, 'POST', `${base}/rebuild`);
     const rebuilt = await waitJob(token, rb.body.job.id);
     assert.equal(rebuilt.status, 'done', rebuilt.error);
     assert.deepEqual(rebuilt.result.failed, []);
-    assert.deepEqual((await publicJson(ranking.publicId)).json!.games, first.json!.games);
+    assert.ok(sameGames(await eventually(ranking.publicId, (r) => sameGames(r, first)), first), '作り直しで JSON が変わった');
     console.log(`ok  作り直しで同じ JSON（変わった対局 ${rebuilt.result.changed}件）`);
 
     const regen = await api(token, 'POST', `${base}/public-id`);
     assert.equal(regen.status, 200);
     assert.notEqual(regen.body.publicId, ranking.publicId);
-    assert.equal((await publicJson(regen.body.publicId)).status, 200);
-    const old = await publicJson(ranking.publicId);
+    assert.equal((await eventually(regen.body.publicId, (r) => r.status === 200)).status, 200);
+    const old = await eventually(ranking.publicId, (r) => r.status === 403 || r.status === 404);
     assert.ok(old.status === 403 || old.status === 404, `古い JSON が ${old.status}`);
     console.log(`ok  公開 ID の取り直し（古い URL は ${old.status}）`);
   } finally {

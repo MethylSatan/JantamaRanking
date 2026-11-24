@@ -76,7 +76,7 @@ DynamoDB のテーブルは `pk`/`sk` のまま、GSI は足さない。件数�
 - 集計は、ランキングの `GAME#` の項目を1回の Query で読み、取り込み済みの `GameResult` から作る
 - 操作ログはランキングごとに持つ。Admin が全体を見るときは、ランキングごとに引いて合わせる
 - 牌譜（head）は data バケットの `records/<牌譜 uuid>.json` に置く（ランキングをまたいで1つ）。作り直しは、取り込み済みの uuid ごとに S3 の牌譜から `GameResult` を作り直す
-- ランキングの JSON: 取り込み・対象外・戻す・作り直し・名前の変更のたびに作り直し、site バケットの `rankings/<公開 ID>.json` に置いて CloudFront から配る（閲覧で Lambda を動かさない）。`Cache-Control: no-cache` を付ける（CloudFront の `Managed-CachingOptimized` は配信元の Cache-Control に従うので、毎回確かめに行く）。公開 ID はランキング ID と別の推測されない値にし、取り直せるようにする。取り直したら新しい JSON を置いてから古い JSON を消す。ランキングを削除（非公開）にしたときも JSON を消す。過去の版は S3 のバージョニングで残る
+- ランキングの JSON: 取り込み・対象外・戻す・作り直し・名前の変更のたびに作り直し、site バケットの `rankings/<公開 ID>.json` に置いて CloudFront から配る（閲覧で Lambda を動かさない）。`Cache-Control: no-cache` を付ける（CloudFront の `Managed-CachingOptimized` は配信元の Cache-Control に従うので、毎回確かめに行く。ただし最小 TTL の1秒は覚えるので、反映は最大1秒ほど遅れる）。公開 ID はランキング ID と別の推測されない値にし、取り直せるようにする。取り直したら新しい JSON を置いてから古い JSON を消す。ランキングを削除（非公開）にしたときも JSON を消す。過去の版は S3 のバージョニングで残る
 - ランキングの JSON の形: `{ version: 1, name, generatedAt, games: GameResult[] }`。`games` は取り込み済みの対局だけ、終了時刻の順（同時刻は uuid の順）。集計済みの表にはしない。閲覧の画面（タスク 027）が期間・四麻か三麻かで絞り込んでから `src/ranking` の `aggregate` などで集計する
 - 置き場所: 牌譜は data バケットの `records/<uuid>.json`、雀魂のバージョンと定義は同じバケットの `state/client-version.json`・`state/liqi.json`。システム用の雀魂アカウントの認証情報は SSM の SecureString `/jantama-ranking/majsoul-credentials`（JSON: `type`・`code`・`uid`）、定義の鍵は `/jantama-ranking/liqi-lua-key`（`docs/deploy.md` 手順 8）
 
