@@ -123,6 +123,9 @@ aws cloudfront create-invalidation --distribution-id $(terraform -chdir=infra ou
 - `curl -sI https://jantama-ranking.methylsatan.com/`（200、`x-robots-tag: noindex, nofollow, noarchive`）
 - `curl -s https://jantama-ranking.methylsatan.com/api/health`（`{"ok":true}`）
 - Function URL に直接要求すると 403（`aws lambda get-function-url-config --function-name jantama-ranking-api` で URL を出す）
+- API の中身（Admin のトークンで）: `npm run apicheck -- smoke`。テスト用のランキングを作り、操作して、最後に削除（非公開）にする。任意の要求は `npm run apicheck -- call GET /api/me`
+  - トークンは `local/apicheck/tokens.json`（Cognito のリフレッシュトークン。既定で30日）。無い・切れたときは `npm run apicheck -- login`: Playwright がブラウザを開くので、Discord のログインだけ手で行う（入力は自動化しない。Discord の規約と CAPTCHA のため）。ブラウザのプロファイルも `local/apicheck/profile` に残す
+  - Admin でない利用者での確認（403・404）は、Discord のアカウントが1つなので本番ではできない。自動テスト（`src/api/*.test.ts`）で確かめる
 
 ## 注意・メモ
 - **OIDC の `sub` は名前だけの形式**（`repo:MethylSatan/JantamaRanking:ref:refs/heads/master`）。word-flashcard（新しいリポジトリ）は不変 ID 付きの形式で、リポジトリごとに違う。ID 付きで書いたら「Not authorized to perform sts:AssumeRoleWithWebIdentity」になった（2026-11-20）。形式は `gh api repos/MethylSatan/JantamaRanking/actions/oidc/customization/sub` の `sub_claim_prefix` で確かめる。`infra/variables.tf` の `github_repo_sub`
