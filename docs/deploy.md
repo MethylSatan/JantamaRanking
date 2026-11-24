@@ -82,7 +82,20 @@ Cognito ユーザープール jantama-ranking（Lite プラン。ログインは
 5. master に push する（または Actions の `deploy` を手動実行）
 6. Discord の開発者ポータルの General Information に、Privacy Policy URL（`https://jantama-ranking.methylsatan.com/privacy.html`）を入れる（Discord の開発者向けの規約で必要）
 7. Admin にする人が Discord でログインし、`admins` グループに入れる（下の「ログインの許可」）
-8. システム用の雀魂アカウントの認証情報と定義の鍵を SSM に入れる（タスク 013 で手順を足す）
+8. システム用の雀魂アカウントの認証情報と定義の鍵を SSM に入れる（下の「雀魂の認証情報と定義の鍵」）
+
+### 雀魂の認証情報と定義の鍵
+Lambda が雀魂にログインするために使う（`src/api/aws.ts`）。値はリポジトリにも `docs/local/` にも書かない。手元の回収ツールの秘密ファイル（`local/collector/secret.json`・`lua-key.txt`。`docs/collector.md`）から入れる。値が画面やシェルの履歴に出ないよう、権限600の一時ファイルを `file://` で渡して、すぐ消す。
+```
+umask 077; t=$(mktemp -d)
+python3 -c "import json;d=json.load(open('local/collector/secret.json'));print(json.dumps({k:d[k] for k in ('type','code','uid')}))" > $t/cred.json
+tr -d '\r\n' < local/collector/lua-key.txt > $t/key.txt
+aws ssm put-parameter --name /jantama-ranking/majsoul-credentials --type SecureString --value file://$t/cred.json --overwrite
+aws ssm put-parameter --name /jantama-ranking/liqi-lua-key --type SecureString --value file://$t/key.txt --overwrite
+rm -rf $t
+```
+- 認証情報を取り直したら（タスク 009）、上の1つめだけやり直す
+- 雀魂のバージョンと定義は、Lambda が data バケットの `state/` に置く。無いとき・`oauth2Auth` が `err=151` のときに静的ファイルから作り直す（入れる必要はない）
 
 ### Discord の Client Secret
 **tfstate に入れない。** secret が漏れると、アプリの持ち主（Admin）の Discord アカウントのトークンを、`client_credentials` で取られうる（`docs/decisions.md` 2026-11-23 タスク 020）。
@@ -124,6 +137,7 @@ aws cloudfront create-invalidation --distribution-id $(terraform -chdir=infra ou
 - `curl -s https://jantama-ranking.methylsatan.com/api/health`（`{"ok":true}`）
 - Function URL に直接要求すると 403（`aws lambda get-function-url-config --function-name jantama-ranking-api` で URL を出す）
 - API の中身（Admin のトークンで）: `npm run apicheck -- smoke`。テスト用のランキングを作り、操作して、最後に削除（非公開）にする。任意の要求は `npm run apicheck -- call GET /api/me`
+- 候補の更新から取り込みまで（タスク 025）: `npm run apicheck -- flow <表示用ID> [取り込む件数]`。テスト用のランキングに雀魂アカウントを指定し、候補の更新 → 取り込み → 公開の URL のランキングの JSON → 対象外・戻す → 作り直し → 公開 ID の取り直しを確かめ、最後に削除（非公開）にする。**雀魂へのログインが2回起きる**（候補の更新と取り込み）。牌譜は S3 の `records/` に残る
   - トークンは `local/apicheck/tokens.json`（Cognito のリフレッシュトークン。既定で30日）。無い・切れたときは `npm run apicheck -- login`: Playwright がブラウザを開くので、Discord のログインだけ手で行う（入力は自動化しない。Discord の規約と CAPTCHA のため）。ブラウザのプロファイルも `local/apicheck/profile` に残す
   - Admin でない利用者での確認（403・404）は、Discord のアカウントが1つなので本番ではできない。自動テスト（`src/api/*.test.ts`）で確かめる
 
@@ -132,5 +146,6 @@ aws cloudfront create-invalidation --distribution-id $(terraform -chdir=infra ou
 - デプロイを許すのは `master` ブランチだけ（`infra/variables.tf` の `deploy_branch`）
 - DynamoDB のテーブルと Cognito のユーザープールは削除保護を有効にしている。消すときは先に外す
 - 画面用のバケットもバージョニングを有効にしている（ランキングの JSON の過去の版を残すため）。sync のたびに古い版が残るが、量は小さい
-- Lambda の環境変数: `DATA_BUCKET`、`TABLE_NAME`、`SSM_PREFIX`（`/jantama-ranking/`）、`USER_POOL_ID`・`USER_POOL_CLIENT_ID`（アクセストークンの検証）
+- Lambda の環境変数: `DATA_BUCKET`、`SITE_BUCKET`（ランキングの JSON の置き場）、`TABLE_NAME`、`SSM_PREFIX`（`/jantama-ranking/`）、`USER_POOL_ID`・`USER_POOL_CLIENT_ID`（アクセストークンの検証）
+- Lambda の権限（タスク 025 で追加）: 自分の `lambda:InvokeFunction`（ジョブを非同期で起動する）、site バケットの `rankings/*` の `s3:DeleteObject`（公開 ID の取り直し・削除で古い JSON を消す）
 - **`methylsatan.com`（apex）の A レコードはこのリポジトリで作っている**（`infra/shared.tf`。値は到達しない文書用のアドレス `192.0.2.1`）。Cognito の独自ドメインが、親ドメインに A レコードがあることを求めるため。ゾーンは共有のリソースなので、ほかのリポジトリでは apex の A レコードを作らない（2026-11-23、タスク 020）

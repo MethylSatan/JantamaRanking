@@ -47,6 +47,8 @@ resource "aws_lambda_function" "api" {
   environment {
     variables = {
       DATA_BUCKET = aws_s3_bucket.data.bucket
+      # ランキングの JSON の置き場（rankings/<公開 ID>.json）
+      SITE_BUCKET = aws_s3_bucket.site.bucket
       TABLE_NAME  = aws_dynamodb_table.main.name
       SSM_PREFIX  = "/${local.name}/"
       # x-auth-token の Cognito のアクセストークンを確かめる（発行者と client_id）
@@ -113,6 +115,18 @@ data "aws_iam_policy_document" "api" {
   statement {
     actions   = ["s3:GetObject", "s3:PutObject"]
     resources = ["${aws_s3_bucket.data.arn}/*", "${aws_s3_bucket.site.arn}/rankings/*"]
+  }
+
+  # 公開 ID を取り直したときと、ランキングを削除（非公開）にしたときに、古い JSON を消す。過去の版はバージョニングで残る
+  statement {
+    actions   = ["s3:DeleteObject"]
+    resources = ["${aws_s3_bucket.site.arn}/rankings/*"]
+  }
+
+  # 雀魂への要求はジョブにして、自分を非同期（InvocationType: Event）で起動する（docs/architecture.md「非同期の処理」）
+  statement {
+    actions   = ["lambda:InvokeFunction"]
+    resources = [aws_lambda_function.api.arn]
   }
 
   statement {

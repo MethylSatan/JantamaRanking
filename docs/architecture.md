@@ -51,7 +51,7 @@ Admin・Host の認証: Cognito のユーザープール ← Discord（OIDC の 
 | ログイン | Admin・Host は Discord でログインする（メールとパスワードは使わない）。Discord を Cognito の OIDC の IdP にし、画面は Cognito の Hosted UI（`jantama-ranking-auth.methylsatan.com`）へ移って認可コード＋PKCE でトークンを受け取る。許可した Discord の ID（SSM の一覧）でなければ、pre sign-up のトリガーが利用者を作らせない。スコープは `openid identify`（メールは求めない）。Admin かどうかは Cognito のグループ（`admins`）で持つ。操作ログには Cognito の `sub` を書き、Discord の ID・表示名との対応は別に持つ（本人の依頼で消せるように）。接続はタスク 020、主催者の本人確認は行わない（タスク 021）、権限は下の「権限（タスク 022）」（`docs/decisions.md` 2026-11-20 タスク 014） |
 | Terraform | `infra/`。状態は `methylsatan-tfstate` の `jantama-ranking/terraform.tfstate`。Route 53 のゾーン、証明書（us-east-1）、GitHub の OIDC プロバイダーは word-flashcard のものを `data` で参照する。リソースの一覧・手順・OAC の注意は `docs/deploy.md` |
 
-### データモデル（2026-11-25 にタスク 013 の分割で設計。実装はタスク 024・025）
+### データモデル（2026-11-25 にタスク 013 の分割で設計。タスク 024・025 で実装済み）
 DynamoDB のテーブルは `pk`/`sk` のまま、GSI は足さない。件数が小さいので、一覧は一覧用の項目で引く（Scan は使わない）。
 
 | 項目 | `pk` | `sk` | 主な属性 |
@@ -59,50 +59,66 @@ DynamoDB のテーブルは `pk`/`sk` のまま、GSI は足さない。件数�
 | ランキング | `RANKING#<ID>` | `META` | 名前、公開 ID、状態（公開 / 削除）、作成者の sub・時刻 |
 | ランキングの一覧（Admin 用） | `RANKINGS` | `RANKING#<ID>` | 名前、状態 |
 | ランキングの雀魂アカウント | `RANKING#<ID>` | `ACCOUNT#<表示用 ID>` | 内部 ID（最初の候補の更新で引く）、追加した人の sub・時刻 |
-| 雀魂アカウント（ランキングをまたいで共有） | `MAJSOUL#<内部 ID>` | `META` | 最後に候補を更新した時刻、名前 |
-| 雀魂アカウント → ランキング | `MAJSOUL#<内部 ID>` | `RANKING#<ID>` | （候補を更新したときの配り先） |
+| 雀魂アカウント（ランキングをまたいで共有） | `MAJSOUL#<内部 ID>` | `META` | 最後に候補を更新した時刻、最後に手動の更新を受け付けた時刻、名前（一覧に出ていたニックネーム） |
+| 雀魂アカウント → ランキング | `MAJSOUL#<内部 ID>` | `RANKING#<ID>` | 表示用 ID（定期取得で、取りこぼしの警告に使う処理済みの対局を集める） |
 | 雀魂アカウントの一覧（定期取得用） | `MAJSOULS` | `MAJSOUL#<内部 ID>` | |
 | 候補の対局（雀魂アカウントごと） | `MAJSOUL#<内部 ID>` | `GAME#<牌譜 uuid>` | 開始・終了時刻、四麻/三麻、`sub_tag`、参加者 |
-| 対局の状態（ランキングごと） | `RANKING#<ID>` | `GAME#<牌譜 uuid>` | 状態（取り込み済み / 対象外）、取り込み済みなら `GameResult`、変えた人の sub・時刻 |
+| 対局の状態（ランキングごと） | `RANKING#<ID>` | `GAME#<牌譜 uuid>` | 状態（取り込み済み / 対象外）、取り込んだことがあれば `GameResult`（対象外にしても残す）、変えた人の sub・時刻 |
 | 操作ログ | `RANKING#<ID>` | `LOG#<ISO 時刻>#<乱数>` | sub、`via`、操作、対象、内容 |
 | Host・逆向きの項目・利用者の情報 | 下の「権限（タスク 022）」 | | |
-| ロック | `LOCK` | `MAJSOUL` | 持ち主のジョブ ID、期限（条件付き書き込み） |
-| ジョブ | `JOB#<ID>` | `META` | 種類、ランキング ID、状態（待ち / 実行中 / 完了 / 失敗）、進み具合、結果、作成者の sub |
+| ロック | `LOCK` | `MAJSOUL` | 持ち主のジョブ ID、期限（epoch ms。条件付き書き込み） |
+| ジョブ | `JOB#<ID>` | `META` | 種類（`refresh` / `import` / `rebuild`）、ランキング ID（定期取得は無し）、状態（`queued` / `running` / `done` / `failed`）、進み具合、結果、誤り、作成者の sub と `via`（定期取得は `scheduler`）、取り込む uuid |
 
 - 候補は、ランキングの雀魂アカウントたちの候補の対局を牌譜 uuid で合わせ、そのランキングで状態の項目を持つ対局を除いたもの。状態の項目が無ければ候補。同じ雀魂アカウントの対局を、別のランキングでは違う扱いにできる
 - 最後に候補を更新した時刻は雀魂アカウント単位（同じアカウントを指す複数のランキングで共有する）
-- 雀魂アカウントの指定は、表示用 ID を保存するだけで雀魂に要求しない。内部 ID は最初の候補の更新のジョブで引く
+- 雀魂アカウントの指定は、表示用 ID を保存するだけで雀魂に要求しない。内部 ID は最初の候補の更新のジョブで引き、そのとき「雀魂アカウント → ランキング」と「雀魂アカウントの一覧」の項目も作る。外すと、この2つも外す（どのランキングからも指されなくなったときだけ一覧から外す）
+- 候補の対局は、一覧に出たものを処理済みも含めて全件書く（同じ uuid は上書き）。ジョブ・候補の項目を消すか（DynamoDB の TTL）は、手順が固まった後に決める（タスク 025 のメモ）
 - 集計は、ランキングの `GAME#` の項目を1回の Query で読み、取り込み済みの `GameResult` から作る
 - 操作ログはランキングごとに持つ。Admin が全体を見るときは、ランキングごとに引いて合わせる
 - 牌譜（head）は data バケットの `records/<牌譜 uuid>.json` に置く（ランキングをまたいで1つ）。作り直しは、取り込み済みの uuid ごとに S3 の牌譜から `GameResult` を作り直す
-- ランキングの JSON: 取り込みのたびに作り直し、site バケットの `rankings/<公開 ID>.json` に置いて CloudFront から配る（閲覧で Lambda を動かさない）。公開 ID はランキング ID と別の推測されない値にし、取り直せるようにする。取り直したときの古い JSON の扱いはタスク 025 で決める（今の IAM に `DeleteObject` は無い）
+- ランキングの JSON: 取り込み・対象外・戻す・作り直し・名前の変更のたびに作り直し、site バケットの `rankings/<公開 ID>.json` に置いて CloudFront から配る（閲覧で Lambda を動かさない）。`Cache-Control: no-cache` を付ける（CloudFront の `Managed-CachingOptimized` は配信元の Cache-Control に従うので、毎回確かめに行く）。公開 ID はランキング ID と別の推測されない値にし、取り直せるようにする。取り直したら新しい JSON を置いてから古い JSON を消す。ランキングを削除（非公開）にしたときも JSON を消す。過去の版は S3 のバージョニングで残る
+- ランキングの JSON の形: `{ version: 1, name, generatedAt, games: GameResult[] }`。`games` は取り込み済みの対局だけ、終了時刻の順（同時刻は uuid の順）。集計済みの表にはしない。閲覧の画面（タスク 027）が期間・四麻か三麻かで絞り込んでから `src/ranking` の `aggregate` などで集計する
+- 置き場所: 牌譜は data バケットの `records/<uuid>.json`、雀魂のバージョンと定義は同じバケットの `state/client-version.json`・`state/liqi.json`。システム用の雀魂アカウントの認証情報は SSM の SecureString `/jantama-ranking/majsoul-credentials`（JSON: `type`・`code`・`uid`）、定義の鍵は `/jantama-ranking/liqi-lua-key`（`docs/deploy.md` 手順 8）
 
-### API（024 の分は実装済み。025 の分は案）
+### API（024・025 で実装済み）
 | 要求 | 内容 |
 |---|---|
 | `GET /api/me` | sub、Admin か、操作の許可の表（`src/api/authorize.ts` の `PERMISSIONS`。画面がボタンを出し分ける） |
 | `GET` / `POST /api/rankings` | ランキングの一覧（Admin は全部、Host は付いているもの。削除したものも状態付きで出す）・作成（`{name}`、1〜100文字） |
 | `GET` / `PATCH` / `DELETE /api/rankings/{id}` | 取得（雀魂アカウントの一覧と、どの役割で許したか `via` を含む）・名前の変更（`{name}`）・削除（非公開にする） |
 | `PUT` / `DELETE /api/rankings/{id}/accounts/{表示用 ID}` | 雀魂アカウントの指定・外す（表示用 ID は数字だけ。何度呼んでも同じ結果。変わったときだけ操作ログに書く） |
-| `GET /api/rankings/{id}/games?state=candidate\|imported\|excluded` | 対局の一覧 |
-| `POST /api/rankings/{id}/refresh` | 候補の更新（ジョブ） |
-| `POST /api/rankings/{id}/import` | 取り込み（牌譜 uuid の配列。ジョブ） |
-| `POST /api/rankings/{id}/rebuild` | 牌譜からの作り直し（ジョブ） |
-| `POST /api/rankings/{id}/games/{uuid}/exclude` / `restore` | 対象外にする・戻す（すぐ終わる。ランキングの JSON を作り直す） |
-| `POST /api/rankings/{id}/public-id` | 公開 ID の取り直し |
+| `GET /api/rankings/{id}/games?state=candidate\|imported\|excluded` | 対局の一覧（既定は `candidate`）と、雀魂アカウントの一覧（内部 ID・名前・最後に候補を更新した時刻）。候補は一覧の1件の形に、どの雀魂アカウントの一覧に出たか（`sources`）を足したもの。取り込み済み・対象外は状態の項目 |
+| `POST /api/rankings/{id}/refresh` | 候補の更新（ジョブ。202）。雀魂アカウントが無ければ 400、同じ雀魂アカウントの手動の更新から5秒たっていなければ 429 |
+| `POST /api/rankings/{id}/import` | 取り込み（`{uuids}`。そのランキングの候補だけ、100件まで。ジョブ。202） |
+| `POST /api/rankings/{id}/rebuild` | 牌譜からの作り直し（ジョブ。202。雀魂には接続しない） |
+| `POST /api/rankings/{id}/games/{uuid}/exclude` / `restore` | 対象外にする・戻す（すぐ終わる。取り込み済みの対局が変わればランキングの JSON を作り直す） |
+| `POST /api/rankings/{id}/public-id` | 公開 ID の取り直し（古い JSON は消す） |
 | `GET /api/rankings/{id}/logs` | 操作ログ（新しい順に100件） |
-| `GET /api/jobs/{id}` | ジョブの状態 |
+| `GET /api/jobs/{id}` | ジョブの状態。そのランキングを見られる人だけ（定期取得のジョブは Admin だけ。ほかは 404） |
 
 - 認証は `x-auth-token` ヘッダーの Cognito のアクセストークン（`docs/deploy.md`「API と OAC」）。`src/api/jwt.ts` が署名（RS256、JWKS）・発行者・`token_use=access`・`client_id`・期限を確かめる。判断は `authorize()`（下の「権限（タスク 022）」）
 - 応答: トークンが無い・正しくない 401、表で許されない 403、ランキングが無い・付いていない 404、入力の誤り 400
 - 利用者の情報（`USER#<sub>` / `PROFILE`）は 024 では書かない。アクセストークンに Discord の ID・名前が無く、使うのは Host の付け外し（タスク 023）なので、023 で決める
 
+### 取り込みの手順（Admin・Host から見た流れ。タスク 025）
+1. ランキングを作り、雀魂アカウント（表示用 ID）を指定する
+2. 候補を更新する（ジョブ）: システム用の雀魂アカウントでログインし、ランキングの雀魂アカウントごとに友人戦の一覧（四麻・三麻）を取って保存する。内部 ID がまだ無ければ先に引く。1つのアカウントの失敗（表示用 ID が見つからない など）は、そのアカウントの結果に書いて、ほかは続ける。上限が近い・取りこぼしたおそれの警告は、ジョブの結果に入れる
+3. 候補を見る: ランキングの雀魂アカウントたちの対局を uuid で合わせ、このランキングで状態を持つ対局を除いて、新しい順に出す
+4. 対局ごとに選ぶ
+   - 取り込む（ジョブ）: 牌譜が S3 に無い対局だけ雀魂から取って `records/` に置き（S3 にあればログインしない）、`fromRecordGame` で結果を作って「取り込み済み」にする。起動を待つ間に状態が付いた対局は触らない。最後にランキングの JSON を作り直す
+   - 対象外にする（すぐ終わる）: 「対象外」にする。取り込み済みだった対局は結果を残したまま外れる
+5. 戻す: 対象外の対局を、結果があれば「取り込み済み」に、無ければ候補に戻す
+6. 作り直し（ジョブ）: 結果を持つ対局ごとに、S3 の牌譜から結果を作り直し、JSON を作り直す
+7. 公開 ID の取り直し: 新しい公開 ID で JSON を置き、古い JSON を消す
+- 操作はすべて操作ログに書く。ジョブは、作った人の sub と `via` で、終わったとき（失敗も）に書く。対象はジョブ ID、内容はジョブの結果
+
 ### 非同期の処理（タスク 025）
-雀魂への要求は CloudFront の応答待ち（既定30秒）を超えうるので、ジョブにする。
-1. API がジョブの項目を作り、自分の Lambda を非同期（`InvocationType: Event`、入力 `{"source":"job","jobId":…}`）で起動して、202 とジョブ ID を返す
-2. 起動された Lambda がロックを取り、雀魂に要求し、ジョブの項目に進み具合と結果を書く
+雀魂への要求は CloudFront の応答待ち（既定30秒）を超えうるので、ジョブにする。`src/api/jobs.ts`。
+1. API がジョブの項目を作り、自分の Lambda を非同期（`InvocationType: Event`、入力 `{"source":"job","jobId":…}`。関数名は `AWS_LAMBDA_FUNCTION_NAME`）で起動して、202 とジョブを返す
+2. 起動された Lambda は、ジョブが `queued` のときだけ `running` に変えて処理する（非同期の起動は2回届きうるため）。ロックを取り、雀魂に要求し、ジョブの項目に進み具合と結果を書く。ロックが使われていれば5秒おきに最大60秒待ち、空かなければ失敗にする。ロックの期限は Lambda の timeout（300秒）より長い360秒
 3. 画面はジョブの状態を数秒おきに見る
-- 定期取得（Scheduler の `{"source":"scheduler","action":"refresh-candidates"}`）も同じ処理を通す
+- 定期取得（Scheduler の `{"source":"scheduler","action":"refresh-candidates"}`）も、ジョブの項目を作って同じ処理を通す。登録されたすべての雀魂アカウントの候補を更新する。警告は CloudWatch Logs に `[通知]` 付きで出す（有効にするのはタスク 028）
+- collector の `notify`（定義が変わった、ログインに失敗した など）は、CloudWatch Logs に `[通知]` 付きで出し、ジョブの結果の `notices` にも入れる
 
 ### 作り直し・取り消し・履歴（`docs/product.md` 非機能要件「旧方式の利点を引き継ぐ」）
 - 牌譜の生の json を置く S3 はバージョニングを有効にする。対局の結果とランキングは、牌譜から作る派生データとして扱う
@@ -189,12 +205,12 @@ DynamoDB のテーブルは `pk`/`sk` のまま、GSI は足さない。件数�
 - 取り消し: ランキングから外すだけなら、Host の項目を消す。利用者そのものをやめるときは、許可の一覧から外し、Host の項目・利用者の情報・Cognito の利用者を消す。操作ログには `sub` だけが残る（Discord の規約。`docs/local/014-login-notes.md`）
 
 #### 雀魂への負荷との関係
-- 手動の候補の更新の間隔は、役割ではなく雀魂アカウントごとに制限する。同じ雀魂アカウントを複数のランキングが指していても、雀魂への要求は雀魂アカウントの単位で起きるため。Admin も同じ制限に従う
+- 手動の候補の更新の間隔は、役割ではなく雀魂アカウントごとに制限する。同じ雀魂アカウントを複数のランキングが指していても、雀魂への要求は雀魂アカウントの単位で起きるため。Admin も同じ制限に従う。間隔は5秒（ユーザーの判断で数秒。`docs/decisions.md` 2026-11-25 タスク 025）。内部 ID がまだ無い（初めての更新の）アカウントは数えない
 - 同時に実行しないためのロックは全体で1つ（下の「雀魂に負荷をかけない運用」）。開放して要求が増えたときの上限は、タスク 023 でやり直す
 
 ### 雀魂に負荷をかけない運用
 - 1回の実行につきログインは1回。要求の間隔は1秒以上。1回で取る牌譜の数に上限を設ける
-- 同時に実行しない（DynamoDB の条件付き書き込みでロック）。手動の更新は間隔を制限する
+- 同時に実行しない（DynamoDB の条件付き書き込みでロック。上の「非同期の処理」）。手動の更新は雀魂アカウントごとに5秒あける
 - 定期取得は1日1回程度
 
 ### 費用の見込み（東京）
@@ -235,7 +251,7 @@ DynamoDB のテーブルは `pk`/`sk` のまま、GSI は足さない。件数�
 | ファイル | 内容 |
 |---|---|
 | `session.ts` | `openSession(deps)`: 保存済みの雀魂のバージョンと定義でログインする。`oauth2Auth` が `err=151` のときだけ、静的ファイルから作り直し、ログインを1回だけやり直す。`refreshState`: 作り直しだけ（ログインしない） |
-| `collect.ts` | `listCandidates(session, 主催者, 既知か)`: 四麻・三麻の友人戦から、取り込み済み・対象外を除いた候補。`fetchHeads(session, uuids)`: 牌譜の head を取り、見た目の情報を外す。`gameLength(sub_tag)`: 東風・半荘 |
+| `collect.ts` | `listCandidates(session, 主催者, 既知か)`: 四麻・三麻の友人戦から、取り込み済み・対象外を除いた候補と、除く前の全件（`all`）。`fetchHeads(session, uuids)`: 牌譜の head を取り、見た目の情報を外す。`gameLength(sub_tag)`: 東風・半荘 |
 | `static.ts` / `unityfs.ts` | 公開の静的ファイル（ログインなし）。`bundle_info_so.majset` から、資産のパスが入っているバンドル名を引く |
 | `liqi.ts` | 定義の Lua の復号（鍵は呼び出し側から）、protobufjs の JSON への変換、使っている型の比較 |
 | `connection.ts` / `login.ts` | WebSocket と L2 のログイン。応答に定義に無い項目番号があればログに残す |
@@ -247,7 +263,8 @@ DynamoDB のテーブルは `pk`/`sk` のまま、GSI は足さない。件数�
 - 保存する牌譜: `RecordGame` の head（`fetchGameRecordsDetail` の `record_list` の1件、protobufjs の `toObject` の形）から、参加者の見た目の情報（`avatar_id`・`character`・`views`・`title`・`avatar_frame`）を外したもの。1件あたり json で約1.2KB（gzip で約0.55KB）。0 や空の項目は省かれる（席 0 の `seat` など）
 - 要求: ログインは1回の実行につき1回（`err=151` のやり直しを除く）。Lobby の要求の間は2秒。`fetchGameRecordsDetail` は50件ずつまとめる（50件まで1回で返ることを確認）。1回の実行で取る牌譜は100件まで
 - 2本目の接続（`jpgsbk`）は張らない。張らなくても一覧と牌譜は取れる（タスク 011・006）
-- Lambda（`nodejs24.x`）へは、esbuild で1ファイルの ESM にまとめて載せる（`npm run build:api`。タスク 010）
+- Lambda（`nodejs24.x`）へは、esbuild で1ファイルの ESM にまとめて載せる（`npm run build:api`。タスク 010）。`ws` などは CommonJS で Node の組み込みを `require` するので、banner で `createRequire` を入れる（入れないと読み込みで `Dynamic require of "events" is not supported` になる。`node -e` で読むと `require` があるので気づかない）
+- Web サービスでの組み込み（タスク 025）: `src/api/aws.ts` が `CollectorDeps` を作る（`store` は S3 の `state/`、認証情報と鍵は SSM）。`listCandidates` の戻り値の `all`（処理済みを含む全件）を候補の対局として保存する
 
 ## 旧集計（スプレッドシート。タスク 003 で記録）
 Web サービスに移す集計のルール（タスク 012）。シートの場所と、データの具体（件数・期間）は `docs/local/003-sheet-notes.md`。

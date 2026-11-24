@@ -1,53 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createHandler, handler, type FunctionUrlEvent } from './handler.ts';
-import { HttpError } from './errors.ts';
-import { MemoryStore } from './memory-store.ts';
-import type { User } from './authorize.ts';
-
-const event = (method: string, rawPath: string, opts: { token?: string; body?: unknown; base64?: boolean } = {}): FunctionUrlEvent => {
-  const text = opts.body === undefined ? undefined : typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body);
-  return {
-    rawPath,
-    requestContext: { http: { method } },
-    headers: opts.token ? { 'x-auth-token': opts.token } : {},
-    ...(text !== undefined
-      ? opts.base64
-        ? { body: Buffer.from(text).toString('base64'), isBase64Encoded: true }
-        : { body: text, isBase64Encoded: false }
-      : {}),
-  };
-};
-
-// トークンの代わりに利用者の名前をそのまま送る（JWT の検証は jwt.test.ts）
-const USERS: Record<string, User> = {
-  admin: { sub: 'sub-admin', groups: ['admins', 'pool_Discord'] },
-  host: { sub: 'sub-host', groups: ['pool_Discord'] },
-  stranger: { sub: 'sub-stranger', groups: ['pool_Discord'] },
-};
-
-const setup = () => {
-  const store = new MemoryStore();
-  let n = 0;
-  let clock = Date.parse('2026-11-25T00:00:00Z');
-  const h = createHandler(() => ({
-    store,
-    now: () => new Date((clock += 1000)),
-    newRankingId: () => `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}`,
-    newPublicId: () => `public-${n}`,
-    newLogSuffix: () => `s${n}${clock}`,
-    verifyToken: async (token) => {
-      const user = USERS[token];
-      if (!user) throw new HttpError(401, 'unauthorized');
-      return user;
-    },
-  }));
-  const call = async (...args: Parameters<typeof event>) => {
-    const res = await h(event(...args));
-    return { status: res.statusCode, body: JSON.parse(res.body), headers: res.headers };
-  };
-  return { store, call };
-};
+import { handler } from './handler.ts';
+import { event, setup } from './testkit.ts';
 
 test('/api/health は認証なしで応える', async () => {
   const res = await handler(event('GET', '/api/health'));

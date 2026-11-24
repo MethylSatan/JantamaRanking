@@ -1,6 +1,9 @@
 // 本番の API を手元から確かめる道具（開発者向け。docs/deploy.md「確認」）。
 //   node src/apicheck/cli.ts login            Playwright でブラウザを開き、Discord でログインしてトークンを保存する
 //   node src/apicheck/cli.ts smoke            Admin の一連の操作と 401 を確かめる（テスト用のランキングを作り、最後に削除＝非公開にする）
+//   node src/apicheck/cli.ts flow <表示用ID> [取り込む件数]
+//                                             候補の更新 → 取り込み → ランキングの JSON → 対象外・戻す → 作り直し → 公開 ID の取り直し（タスク 025）。
+//                                             雀魂へのログインは候補の更新と取り込みで2回。テスト用のランキングは最後に削除（非公開）にする
 //   node src/apicheck/cli.ts call GET /api/me [JSON の本文]
 // Discord のログインの入力は手で行う（自動化しない）。保存先は local/apicheck/（gitignore 済み）。
 // 保存するのはリフレッシュトークン（Cognito の既定で30日）。切れたら login をやり直す。
@@ -132,6 +135,95 @@ async function smoke() {
   console.log('すべて通りました');
 }
 
+/** ジョブが終わるまで待つ（3秒おき、最大6分） */
+async function waitJob(token: string, jobId: string) {
+  const deadline = Date.now() + 6 * 60_000;
+  let last = '';
+  while (Date.now() < deadline) {
+    const { body } = await api(token, 'GET', `/api/jobs/${jobId}`);
+    const job = body.job;
+    if (job.progress && job.progress !== last) console.log(`    ${job.progress}`);
+    last = job.progress ?? last;
+    if (job.status === 'done' || job.status === 'failed') return job;
+    await new Promise((r) => setTimeout(r, 3000));
+  }
+  throw new Error(`ジョブ ${jobId} が終わりません`);
+}
+
+/** 公開の URL からランキングの JSON を取る（CloudFront 経由。無ければ status だけ） */
+async function publicJson(publicId: string) {
+  const res = await fetch(`${SITE}/rankings/${publicId}.json`);
+  return { status: res.status, json: res.ok ? ((await res.json()) as { name: string; games: { uuid: string }[] }) : undefined };
+}
+
+async function flow(eid: string | undefined, countArg: string | undefined) {
+  if (!eid || !/^\d+$/.test(eid)) throw new Error('使い方: flow <表示用ID> [取り込む件数]');
+  const count = Number(countArg ?? '1');
+  const token = await accessToken();
+  const created = await api(token, 'POST', '/api/rankings', { name: `動作確認 025 ${new Date().toISOString()}` });
+  assert.equal(created.status, 201, JSON.stringify(created.body));
+  const id: string = created.body.id;
+  const base = `/api/rankings/${id}`;
+  console.log(`ok  作成（${id}）`);
+  try {
+    assert.equal((await api(token, 'PUT', `${base}/accounts/${eid}`)).status, 201);
+
+    console.log('..  候補の更新');
+    const refresh = await api(token, 'POST', `${base}/refresh`);
+    assert.equal(refresh.status, 202, JSON.stringify(refresh.body));
+    const refreshed = await waitJob(token, refresh.body.job.id);
+    assert.equal(refreshed.status, 'done', refreshed.error);
+    for (const a of refreshed.result.accounts) {
+      console.log(`ok  候補の更新: 四麻${a.returned?.['4p']}件・三麻${a.returned?.['3p']}件 ${a.warnings?.join(' / ') ?? ''}${a.error ?? ''}`);
+    }
+    if (refreshed.result.notices) console.log(`    通知: ${refreshed.result.notices.join(' / ')}`);
+
+    const games = (await api(token, 'GET', `${base}/games`)).body.games as { uuid: string }[];
+    assert.ok(games.length >= count, `候補が${games.length}件しかない`);
+    const picked = games.slice(0, count).map((g) => g.uuid);
+
+    console.log(`..  取り込み（${picked.length}件）`);
+    const imp = await api(token, 'POST', `${base}/import`, { uuids: picked });
+    assert.equal(imp.status, 202, JSON.stringify(imp.body));
+    const imported = await waitJob(token, imp.body.job.id);
+    assert.equal(imported.status, 'done', imported.error);
+    assert.deepEqual([...imported.result.imported].sort(), [...picked].sort(), JSON.stringify(imported.result));
+    console.log('ok  取り込み');
+
+    const ranking = (await api(token, 'GET', base)).body;
+    const first = await publicJson(ranking.publicId);
+    assert.equal(first.status, 200);
+    assert.deepEqual(first.json!.games.map((g) => g.uuid).sort(), [...picked].sort());
+    console.log(`ok  ランキングの JSON（${SITE}/rankings/<公開 ID>.json）に${first.json!.games.length}件`);
+
+    const target = picked[0]!;
+    assert.equal((await api(token, 'POST', `${base}/games/${target}/exclude`)).body.game.state, 'excluded');
+    assert.ok(!(await publicJson(ranking.publicId)).json!.games.some((g) => g.uuid === target));
+    assert.equal((await api(token, 'POST', `${base}/games/${target}/restore`)).body.game.state, 'imported');
+    assert.deepEqual((await publicJson(ranking.publicId)).json!.games, first.json!.games);
+    console.log('ok  対象外にすると JSON から外れ、戻すと入る');
+
+    const rb = await api(token, 'POST', `${base}/rebuild`);
+    const rebuilt = await waitJob(token, rb.body.job.id);
+    assert.equal(rebuilt.status, 'done', rebuilt.error);
+    assert.deepEqual(rebuilt.result.failed, []);
+    assert.deepEqual((await publicJson(ranking.publicId)).json!.games, first.json!.games);
+    console.log(`ok  作り直しで同じ JSON（変わった対局 ${rebuilt.result.changed}件）`);
+
+    const regen = await api(token, 'POST', `${base}/public-id`);
+    assert.equal(regen.status, 200);
+    assert.notEqual(regen.body.publicId, ranking.publicId);
+    assert.equal((await publicJson(regen.body.publicId)).status, 200);
+    const old = await publicJson(ranking.publicId);
+    assert.ok(old.status === 403 || old.status === 404, `古い JSON が ${old.status}`);
+    console.log(`ok  公開 ID の取り直し（古い URL は ${old.status}）`);
+  } finally {
+    await api(token, 'DELETE', base);
+    console.log('ok  削除（非公開）');
+  }
+  console.log('すべて通りました');
+}
+
 async function call(method: string | undefined, path: string | undefined, body: string | undefined) {
   if (!method || !path) throw new Error('使い方: call <METHOD> <path> [JSON の本文]');
   const res = await api(await accessToken(), method.toUpperCase(), path, body === undefined ? undefined : JSON.parse(body));
@@ -143,8 +235,9 @@ const [command, ...args] = process.argv.slice(2);
 try {
   if (command === 'login') await login();
   else if (command === 'smoke') await smoke();
+  else if (command === 'flow') await flow(args[0], args[1]);
   else if (command === 'call') await call(args[0], args[1], args[2]);
-  else throw new Error('使い方: node src/apicheck/cli.ts login | smoke | call <METHOD> <path> [JSON]');
+  else throw new Error('使い方: node src/apicheck/cli.ts login | smoke | flow <表示用ID> [件数] | call <METHOD> <path> [JSON]');
 } catch (e) {
   console.error(e instanceof Error ? e.message : e);
   process.exitCode = 1;

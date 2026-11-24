@@ -44,6 +44,8 @@ export interface CandidateList {
   accountId: number;
   /** 取り込み済み・対象外を除いた候補。新しい順 */
   candidates: Candidate[];
+  /** 雀魂が返したすべての対局（処理済みを含む）。新しい順 */
+  all: Candidate[];
   /** 雀魂が返した件数（種類ごと） */
   returned: Record<Mode, number>;
   warnings: string[];
@@ -64,6 +66,7 @@ export async function listCandidates(session: Session, host: Host, isKnown: (uui
   }
 
   const candidates: Candidate[] = [];
+  const all: Candidate[] = [];
   const warnings: string[] = [];
   const returned = { '4p': 0, '3p': 0 } as Record<Mode, number>;
   for (const { category, mode } of CATEGORIES) {
@@ -78,10 +81,12 @@ export async function listCandidates(session: Session, host: Host, isKnown: (uui
     } else if (games.length >= LIST_WARN_AT) {
       warnings.push(`${label}: 一覧が${games.length}件。上限の${LIST_LIMIT}件に近い。早めに取り込むか対象外にする`);
     }
+    all.push(...games);
     candidates.push(...games.filter((g) => !isKnown(g.uuid)));
   }
   candidates.sort((a, b) => b.startTime - a.startTime);
-  return { accountId, candidates, returned, warnings };
+  all.sort((a, b) => b.startTime - a.startTime);
+  return { accountId, candidates, all, returned, warnings };
 }
 
 /**

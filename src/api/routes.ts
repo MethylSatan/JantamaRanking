@@ -1,12 +1,24 @@
-// 各 API の処理（タスク 024 の分: 利用者、ランキングの管理、雀魂アカウントの指定、操作ログ）。
-// 一覧は docs/architecture.md「API」。
+// 各 API の処理。024: 利用者、ランキングの管理、雀魂アカウントの指定、操作ログ。
+// 025: 候補の更新・取り込み・対象外・作り直し・公開 ID・ジョブ。一覧は docs/architecture.md「API」。
 
 import { authorize, authorizeGlobal, isAdmin, PERMISSIONS, type Role, type User } from './authorize.ts';
+import type { Blobs } from './blobs.ts';
 import { HttpError } from './errors.ts';
-import type { Ranking, RankingSummary, Store } from './store.ts';
+import { mergedCandidates, publishRanking } from './games.ts';
+import { MIN_REFRESH_INTERVAL_MS, newJob, type OpenMajsoul } from './jobs.ts';
+import type { Job, Ranking, RankingSummary, Store } from './store.ts';
+import { MAX_RECORDS_PER_RUN } from '../collector/index.ts';
 
 export interface Deps {
   store: Store;
+  blobs: Blobs;
+  /** ジョブ ID */
+  newJobId: () => string;
+  /** ジョブを非同期で起動する（本番は自分の Lambda を InvocationType: Event で呼ぶ） */
+  startJob: (jobId: string) => Promise<void>;
+  /** 雀魂への接続（ジョブの中で使う） */
+  openMajsoul: OpenMajsoul;
+  sleep: (ms: number) => Promise<void>;
   /** 現在時刻 */
   now: () => Date;
   /** ランキング ID */
@@ -22,6 +34,8 @@ export interface Context {
   deps: Deps;
   /** JSON の本文（無い・壊れていれば 400） */
   body: () => unknown;
+  /** クエリ文字列 */
+  query: Record<string, string | undefined>;
 }
 
 export interface Response {
@@ -35,6 +49,9 @@ const NAME_MAX = 100;
 const LOG_LIMIT = 100;
 // ランキング ID は randomUUID()
 const RANKING_ID = '([0-9a-f-]{36})';
+// 牌譜 uuid（`yymmdd-` に UUID が続く形）
+const GAME_UUID = '([0-9A-Za-z-]{1,64})';
+const isGameUuid = (s: unknown): s is string => typeof s === 'string' && /^[0-9A-Za-z-]{1,64}$/.test(s);
 
 const readName = (body: unknown): string => {
   const name = (body as { name?: unknown } | null)?.name;
@@ -123,6 +140,8 @@ const renameRanking: Handler = async (ctx, [id]) => {
   if (name !== ranking.name) {
     await ctx.deps.store.updateRanking(ranking.id, { name });
     await log(ctx, ranking.id, via, 'rename', undefined, { from: ranking.name, to: name });
+    // ランキングの JSON に名前が入っている
+    await publishRanking(ctx.deps, { ...ranking, name });
   }
   return { status: 200, body: await detail(ctx.deps.store, { ...ranking, name }, via) };
 };
@@ -134,6 +153,8 @@ const deleteRanking: Handler = async (ctx, [id]) => {
     await ctx.deps.store.updateRanking(ranking.id, { state: 'deleted' });
     await log(ctx, ranking.id, via, 'deleteRanking');
   }
+  // 非公開にするので、ランキングの JSON を消す
+  await publishRanking(ctx.deps, { ...ranking, state: 'deleted' });
   return { status: 200, body: await detail(ctx.deps.store, { ...ranking, state: 'deleted' }, via) };
 };
 
@@ -164,6 +185,142 @@ const listLogs: Handler = async (ctx, [id]) => {
   return { status: 200, body: { logs: await ctx.deps.store.listLogs(ranking.id, LOG_LIMIT) } };
 };
 
+const GAME_STATES = ['candidate', 'imported', 'excluded'] as const;
+
+const listGames: Handler = async (ctx, [id]) => {
+  const { ranking } = await authorize(ctx.user, 'viewRanking', id!, ctx.deps.store);
+  const state = ctx.query.state ?? 'candidate';
+  if (!(GAME_STATES as readonly string[]).includes(state)) throw new HttpError(400, 'invalid state');
+  const { store } = ctx.deps;
+  const accounts = await Promise.all(
+    (await store.listAccounts(ranking.id)).map(async (a) => {
+      const m = a.internalId ? await store.getMajsoul(a.internalId) : undefined;
+      return {
+        displayId: a.displayId,
+        ...(a.internalId ? { internalId: a.internalId } : {}),
+        ...(m?.name !== undefined ? { name: m.name } : {}),
+        ...(m?.lastRefreshedAt ? { lastRefreshedAt: m.lastRefreshedAt } : {}),
+      };
+    }),
+  );
+  if (state === 'candidate') {
+    return { status: 200, body: { state, accounts, games: await mergedCandidates(store, ranking.id) } };
+  }
+  const games = (await store.listGameStates(ranking.id))
+    .filter((g) => g.state === state)
+    .sort((a, b) => (b.result?.endTime ?? 0) - (a.result?.endTime ?? 0) || (a.uuid < b.uuid ? -1 : 1));
+  return { status: 200, body: { state, accounts, games } };
+};
+
+/** ジョブを作って起動する。起動に失敗したらジョブを失敗にする */
+const enqueue = async (ctx: Context, job: Job): Promise<Response> => {
+  await ctx.deps.store.createJob(job);
+  try {
+    await ctx.deps.startJob(job.id);
+  } catch (e) {
+    await ctx.deps.store.updateJob(job.id, { status: 'failed', error: 'could not start', updatedAt: ctx.deps.now().toISOString() });
+    throw e;
+  }
+  return { status: 202, body: { job } };
+};
+
+const refresh: Handler = async (ctx, [id]) => {
+  const { via, ranking } = await authorize(ctx.user, 'refresh', id!, ctx.deps.store);
+  const accounts = await ctx.deps.store.listAccounts(ranking.id);
+  if (accounts.length === 0) throw new HttpError(400, 'no accounts');
+  // 手動の更新の間隔は雀魂アカウントごと。内部 ID がまだ無い（初めての更新）アカウントは数えない
+  const now = ctx.deps.now();
+  for (const a of accounts) {
+    if (a.internalId && !(await ctx.deps.store.reserveRefresh(a.internalId, now, MIN_REFRESH_INTERVAL_MS))) {
+      throw new HttpError(429, 'refreshed too recently');
+    }
+  }
+  return enqueue(ctx, newJob(ctx.deps.newJobId(), 'refresh', { sub: ctx.user.sub, via }, now, { rankingId: ranking.id }));
+};
+
+const importGames: Handler = async (ctx, [id]) => {
+  const { via, ranking } = await authorize(ctx.user, 'import', id!, ctx.deps.store);
+  const raw = (ctx.body() as { uuids?: unknown } | null)?.uuids;
+  if (!Array.isArray(raw) || raw.length === 0 || !raw.every(isGameUuid)) throw new HttpError(400, 'uuids is required');
+  const uuids = [...new Set(raw)];
+  if (uuids.length > MAX_RECORDS_PER_RUN) throw new HttpError(400, `at most ${MAX_RECORDS_PER_RUN} games`);
+  // 候補（このランキングで状態を持たない、雀魂アカウントの一覧に出た対局）だけを受け付ける
+  const candidates = new Set((await mergedCandidates(ctx.deps.store, ranking.id)).map((g) => g.uuid));
+  const unknown = uuids.filter((u) => !candidates.has(u));
+  if (unknown.length) throw new HttpError(400, `not candidates: ${unknown.join(',')}`);
+  return enqueue(
+    ctx,
+    newJob(ctx.deps.newJobId(), 'import', { sub: ctx.user.sub, via }, ctx.deps.now(), { rankingId: ranking.id, uuids }),
+  );
+};
+
+const rebuild: Handler = async (ctx, [id]) => {
+  const { via, ranking } = await authorize(ctx.user, 'rebuild', id!, ctx.deps.store);
+  return enqueue(ctx, newJob(ctx.deps.newJobId(), 'rebuild', { sub: ctx.user.sub, via }, ctx.deps.now(), { rankingId: ranking.id }));
+};
+
+// 対象外にする。取り込み済みの対局は結果を残したまま外す
+const exclude: Handler = async (ctx, [id, uuid]) => {
+  const { via, ranking } = await authorize(ctx.user, 'exclude', id!, ctx.deps.store);
+  const { store } = ctx.deps;
+  const current = await store.getGameState(ranking.id, uuid!);
+  if (current?.state === 'excluded') return { status: 200, body: { game: current } };
+  if (!current && !(await mergedCandidates(store, ranking.id)).some((g) => g.uuid === uuid)) {
+    throw new HttpError(404, 'game not found');
+  }
+  const game = {
+    uuid: uuid!,
+    state: 'excluded' as const,
+    ...(current?.result ? { result: current.result } : {}),
+    changedBy: ctx.user.sub,
+    changedAt: ctx.deps.now().toISOString(),
+  };
+  await store.putGameState(ranking.id, game);
+  await log(ctx, ranking.id, via, 'exclude', uuid, { from: current?.state ?? 'candidate' });
+  if (current?.state === 'imported') await publishRanking(ctx.deps, ranking);
+  return { status: 200, body: { game } };
+};
+
+// 戻す。結果を持っていれば取り込み済みに、無ければ候補に
+const restore: Handler = async (ctx, [id, uuid]) => {
+  const { via, ranking } = await authorize(ctx.user, 'exclude', id!, ctx.deps.store);
+  const { store } = ctx.deps;
+  const current = await store.getGameState(ranking.id, uuid!);
+  if (!current) throw new HttpError(404, 'game not found');
+  if (current.state !== 'excluded') return { status: 200, body: { game: current } };
+  if (current.result) {
+    const game = { ...current, state: 'imported' as const, changedBy: ctx.user.sub, changedAt: ctx.deps.now().toISOString() };
+    await store.putGameState(ranking.id, game);
+    await log(ctx, ranking.id, via, 'restore', uuid, { to: 'imported' });
+    await publishRanking(ctx.deps, ranking);
+    return { status: 200, body: { game } };
+  }
+  await store.deleteGameState(ranking.id, uuid!);
+  await log(ctx, ranking.id, via, 'restore', uuid, { to: 'candidate' });
+  return { status: 200, body: { game: { uuid, state: 'candidate' } } };
+};
+
+// 公開 ID の取り直し。新しい JSON を置いてから、古い JSON を消す
+const regeneratePublicId: Handler = async (ctx, [id]) => {
+  const { via, ranking } = await authorize(ctx.user, 'publicUrl', id!, ctx.deps.store);
+  const publicId = ctx.deps.newPublicId();
+  await ctx.deps.store.updatePublicId(ranking.id, publicId);
+  const updated = { ...ranking, publicId };
+  await publishRanking(ctx.deps, updated);
+  await ctx.deps.blobs.deleteRankingJson(ranking.publicId);
+  await log(ctx, ranking.id, via, 'regeneratePublicId');
+  return { status: 200, body: await detail(ctx.deps.store, updated, via) };
+};
+
+// ジョブは、そのランキングを見られる人だけが見られる。定期取得のジョブは Admin だけ
+const getJob: Handler = async (ctx, [jobId]) => {
+  const job = await ctx.deps.store.getJob(jobId!);
+  if (!job) throw new HttpError(404, 'not found');
+  if (job.rankingId) await authorize(ctx.user, 'viewRanking', job.rankingId, ctx.deps.store);
+  else if (!isAdmin(ctx.user)) throw new HttpError(404, 'not found');
+  return { status: 200, body: { job } };
+};
+
 const routes: [method: string, pattern: RegExp, handler: Handler][] = [
   ['GET', /^\/api\/me$/, me],
   ['GET', /^\/api\/rankings$/, listRankings],
@@ -174,6 +331,14 @@ const routes: [method: string, pattern: RegExp, handler: Handler][] = [
   ['PUT', new RegExp(`^/api/rankings/${RANKING_ID}/accounts/([^/]+)$`), addAccount],
   ['DELETE', new RegExp(`^/api/rankings/${RANKING_ID}/accounts/([^/]+)$`), removeAccount],
   ['GET', new RegExp(`^/api/rankings/${RANKING_ID}/logs$`), listLogs],
+  ['GET', new RegExp(`^/api/rankings/${RANKING_ID}/games$`), listGames],
+  ['POST', new RegExp(`^/api/rankings/${RANKING_ID}/refresh$`), refresh],
+  ['POST', new RegExp(`^/api/rankings/${RANKING_ID}/import$`), importGames],
+  ['POST', new RegExp(`^/api/rankings/${RANKING_ID}/rebuild$`), rebuild],
+  ['POST', new RegExp(`^/api/rankings/${RANKING_ID}/games/${GAME_UUID}/exclude$`), exclude],
+  ['POST', new RegExp(`^/api/rankings/${RANKING_ID}/games/${GAME_UUID}/restore$`), restore],
+  ['POST', new RegExp(`^/api/rankings/${RANKING_ID}/public-id$`), regeneratePublicId],
+  ['GET', new RegExp(`^/api/jobs/${RANKING_ID}$`), getJob],
 ];
 
 /** パスとメソッドに合う処理。パスはあるがメソッドが違えば 405、パスが無ければ undefined */
