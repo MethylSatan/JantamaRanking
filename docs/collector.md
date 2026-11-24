@@ -7,7 +7,7 @@ Web サービスができるまでの間、または動作を確かめるとき�
 
 | ファイル | 中身 | 作り方 |
 |---|---|---|
-| `secret.json` | 運営アカウントの認証情報 `{ "type": 21, "code": "…", "uid": "…" }` | ブラウザで取り出した値を写す（取り出し方は `docs/local/006-collector-notes.md`） |
+| `secret.json` | システム用の雀魂アカウントの認証情報 `{ "type": 21, "code": "…", "uid": "…" }` | ブラウザで取り出した値を写す（取り出し方は `docs/local/006-collector-notes.md`） |
 | `lua-key.txt` | liqi の定義の鍵（1行） | 公開リポジトリには置かない（`docs/local/017-liqi-notes.md`） |
 | `host.json` | 主催者の内部 ID `{ "accountId": … }` | 任意。あれば `candidates` で ID を省ける |
 

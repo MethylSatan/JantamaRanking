@@ -10,10 +10,10 @@
 | [003](003-import-gas-script.md) | GAS スクリプトとシートのサンプルをリポジトリに取り込む | - | done |
 | [004](004-readme-setup.md) | README の導入方法を書く | 013 | todo |
 | [005](005-paifu-collection-method.md) | 牌譜の回収方式の検討 | 001 | done |
-| [006](006-collect-by-operator-account.md) | 運営アカウントでの牌譜回収ツールの実装 | 005、007、011、016、017 | done |
+| [006](006-collect-by-operator-account.md) | システム用の雀魂アカウントでの牌譜回収ツールの実装 | 005、007、011、016、017 | done |
 | [007](007-l2-login-investigation.md) | Node から直接ログインする方法（L2）の調査 | 005 | done |
 | [008](008-web-service-design.md) | セルフサービスの Web サービスの構成検討 | 007 | done |
-| [009](009-credential-lifetime.md) | 運営アカウントの認証情報の有効期間と取り直し方 | 007 | doing |
+| [009](009-credential-lifetime.md) | システム用の雀魂アカウントの認証情報の有効期間と取り直し方 | 007 | doing |
 | [010](010-aws-infra.md) | AWS 基盤（Terraform とデプロイ） | 008、011 | done |
 | [011](011-lambda-majsoul-connectivity.md) | Lambda から雀魂に接続できるかの確認 | 007、008 | done |
 | [012](012-ranking-rules.md) | 集計ルールの移植 | 003 | done |
@@ -26,7 +26,8 @@
 | [019](019-language-and-ui-stack.md) | 言語と画面の技術の選び直し | 008、012 | done |
 | [020](020-discord-login.md) | Discord ログインの接続 | 014 | done |
 | [021](021-host-verification.md) | 主催者の本人確認 | 020、022 | todo |
-| [022](022-authorization-design.md) | 権限の設計 | 020 | todo |
+| [022](022-authorization-design.md) | 権限の設計 | 020 | done |
+| [023](023-open-to-hosts.md) | 主催者への開放（Host の付け外しと許可の一覧） | 013、022 | todo |
 
 ## 新しいタスクの作り方
 - ファイル名は `NNN-短い名前.md`（連番）。この表にも行を足す

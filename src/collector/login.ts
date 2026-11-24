@@ -4,7 +4,7 @@ import type { Conn } from './connection.ts';
 import { defaultSleep, type Sleep } from './pacer.ts';
 import type { ClientVersion } from './static.ts';
 
-/** 運営アカウントの認証情報（Yostar の Token と ID）。値はログに出さない */
+/** システム用の雀魂アカウントの認証情報（Yostar の Token と ID）。値はログに出さない */
 export interface Credentials {
   /** `oauth2Auth` の `type`（Yostar は 21） */
   type: number;

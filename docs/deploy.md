@@ -50,7 +50,7 @@ Cognito ユーザープール jantama-ranking（Lite プラン。ログインは
 | S3（2バケット、バージョニング） | $0.025/GB月 | 牌譜は年500局で約1MB。1円未満 |
 | CloudWatch Logs（Lambda のログ。30日で削除） | 取り込み $0.76/GB | 1円未満 |
 | EventBridge Scheduler | 月1,400万回まで無料 | $0 |
-| Cognito（Lite） | 運営・主催者の数人。Discord からの OIDC 連携は月50 MAU まで無料、超えると $0.015/MAU（2026-11-20、タスク 014 で料金ページの要約を確認） | 無料枠の範囲 |
+| Cognito（Lite） | Admin・Host の数人。Discord からの OIDC 連携は月50 MAU まで無料、超えると $0.015/MAU（2026-11-20、タスク 014 で料金ページの要約を確認） | 無料枠の範囲 |
 | SSM Parameter Store（標準） | 無料 | $0 |
 
 合計の見込みは月数円以内。定価で見積もっても1円台〜数円で、Lambda・CloudWatch Logs などの恒常の無料枠に収まれば $0。
@@ -79,11 +79,11 @@ Cognito ユーザープール jantama-ranking（Lite プラン。ログインは
    ```
 5. master に push する（または Actions の `deploy` を手動実行）
 6. Discord の開発者ポータルの General Information に、Privacy Policy URL（`https://jantama-ranking.methylsatan.com/privacy.html`）を入れる（Discord の開発者向けの規約で必要）
-7. 運営として Discord でログインし、`operators` グループに入れる（下の「ログインの許可」）
-8. 雀魂の運営アカウントの認証情報と定義の鍵を SSM に入れる（タスク 013 で手順を足す）
+7. Admin にする人が Discord でログインし、`admins` グループに入れる（下の「ログインの許可」）
+8. システム用の雀魂アカウントの認証情報と定義の鍵を SSM に入れる（タスク 013 で手順を足す）
 
 ### Discord の Client Secret
-**tfstate に入れない。** secret が漏れると、アプリの持ち主（運営）の Discord アカウントのトークンを、`client_credentials` で取られうる（`docs/decisions.md` 2026-11-23 タスク 020）。
+**tfstate に入れない。** secret が漏れると、アプリの持ち主（Admin）の Discord アカウントのトークンを、`client_credentials` で取られうる（`docs/decisions.md` 2026-11-23 タスク 020）。
 - secret は SSM の SecureString `/jantama-ranking/discord-client-secret` に手で入れる。シェルの履歴に残さないよう、`read -s` で入れる
   ```
   read -rs SECRET && aws ssm put-parameter --name /jantama-ranking/discord-client-secret --type SecureString --value "$SECRET" --overwrite; unset SECRET
@@ -98,11 +98,11 @@ Cognito ユーザープール jantama-ranking（Lite プラン。ログインは
   ```
   aws ssm put-parameter --name /jantama-ranking/allowed-discord-ids --type StringList --value <ID>,<ID> --overwrite
   ```
-- 初回のログインで利用者ができたら、運営をグループに入れる。利用者名は `Discord_<Discord の ID>` の形（タスク 020 で確認）
+- 初回のログインで利用者ができたら、Admin にする人をグループに入れる。利用者名は `Discord_<Discord の ID>` の形（タスク 020 で確認）
   ```
-  aws cognito-idp admin-add-user-to-group --user-pool-id $(terraform -chdir=infra output -raw user_pool_id) --username <利用者名> --group-name operators
+  aws cognito-idp admin-add-user-to-group --user-pool-id $(terraform -chdir=infra output -raw user_pool_id) --username <利用者名> --group-name admins
   ```
-  グループはトークンに入るので、入れた後はログインし直す。連携の利用者は、Cognito が自動で作る `<ユーザープール ID>_Discord` のグループにも入る（運営の判定には使わない）
+  グループはトークンに入るので、入れた後はログインし直す。連携の利用者は、Cognito が自動で作る `<ユーザープール ID>_Discord` のグループにも入る（Admin の判定には使わない）
 - 手元でログインを確かめるときは、`python3 -I -m http.server 5173 --bind 127.0.0.1 -d web/public` を立て、Windows のブラウザで `http://localhost:5173/admin.html` を開く（VS Code の中のブラウザはアドレスが変わり、`redirect_mismatch` になる）
 - 許可を取り消すときは、一覧から外し、`aws cognito-idp admin-delete-user` で利用者を消す（Discord の規約: 不要になったデータは消す）
 

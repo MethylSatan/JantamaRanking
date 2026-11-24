@@ -1,4 +1,4 @@
-# 運営・主催者の認証。ログインは Discord だけ（Discord を OIDC の IdP にする。docs/decisions.md 2026-11-20 タスク 014、2026-11-23 タスク 020）。
+# Admin・Host（主催者）の認証。ログインは Discord だけ（Discord を OIDC の IdP にする。docs/decisions.md 2026-11-20 タスク 014、2026-11-23 タスク 020）。
 # 自己登録は無効。Discord からの初回のログインで利用者が作られるが、許可していない Discord の ID は pre sign-up で拒む（presignup.tf）
 resource "aws_cognito_user_pool" "main" {
   name           = local.name
@@ -102,7 +102,7 @@ resource "aws_cognito_user_pool_client" "web" {
   allowed_oauth_flows_user_pool_client = true
   allowed_oauth_flows                  = ["code"]
   allowed_oauth_scopes                 = ["openid"]
-  # 運営の画面（タスク 013 までは確認用の仮のページ）。localhost は手元での確認用
+  # 管理の画面（タスク 013 までは確認用の仮のページ）。localhost は手元での確認用
   callback_urls = ["https://${local.fqdn}/admin.html", "http://localhost:5173/admin.html"]
   logout_urls   = ["https://${local.fqdn}/", "http://localhost:5173/"]
 
@@ -112,9 +112,9 @@ resource "aws_cognito_user_pool_client" "web" {
   depends_on = [terraform_data.discord_idp]
 }
 
-# 運営。Discord で一度ログインして利用者ができてから、手で入れる（docs/deploy.md）
-resource "aws_cognito_user_group" "operators" {
-  name         = "operators"
+# Admin（全体の権限）。Discord で一度ログインして利用者ができてから、手で入れる（docs/deploy.md、docs/architecture.md「権限」）
+resource "aws_cognito_user_group" "admins" {
+  name         = "admins"
   user_pool_id = aws_cognito_user_pool.main.id
-  description  = "運営（取り込み・選定の操作ができる）"
+  description  = "Admin（すべてのランキングと利用者を管理する）"
 }

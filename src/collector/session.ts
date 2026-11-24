@@ -19,11 +19,11 @@ export type StateKey = 'client-version' | 'liqi';
 /** 呼び出し側が渡すもの */
 export interface CollectorDeps {
   store: StateStore;
-  /** 運営アカウントの認証情報（Lambda では SSM、CLI では秘密ファイル） */
+  /** システム用の雀魂アカウントの認証情報（Lambda では SSM、CLI では秘密ファイル） */
   credentials: () => Promise<Credentials>;
   /** 定義の Lua の鍵（公開リポジトリに置かない） */
   luaKey: () => Promise<Uint8Array>;
-  /** 運営に知らせること（定義が変わった、ログインに失敗した など） */
+  /** Admin に知らせること（定義が変わった、ログインに失敗した など） */
   notify: (msg: string) => void | Promise<void>;
   log?: Log;
   /** 以下はテスト用の差し替え */
