@@ -10,7 +10,7 @@
 | PaifuImporter | `PaifuImporter/` | Node。`getPaifu.js` が `majsoul.js` で雀魂に WebSocket 接続し、URL一覧の各牌譜を `fetchGameRecord` で取得、`parse()` で変換して `output/` に json 保存 |
 | token.js | `misc/token.js` | WebSocket メッセージ（hex）からアクセストークンを取り出す補助 |
 | 牌譜回収 | `src/collector/` | システム用の雀魂アカウントで、主催者の友人戦一覧（`fetchAccountInfoExtra`）と中身（`fetchGameRecordsDetail`）を取る。Web サービスの Lambda から呼ぶ部品と、手元で試す CLI。下の「牌譜回収（タスク 006）」 |
-| Web サービス | `infra/`（Terraform）、`src/api/`（Lambda）、`web/`（画面）、`.github/workflows/deploy.yml` | 基盤はタスク 010 で構築済み（`docs/deploy.md`）。画面と API の中身はタスク 013。下の「Web サービスの構成」 |
+| Web サービス | `infra/`（Terraform）、`src/api/`（Lambda）、`web/`（画面）、`.github/workflows/deploy.yml` | 基盤はタスク 010 で構築済み（`docs/deploy.md`）。画面と API の中身はタスク 013（024〜028 に分割）。下の「Web サービスの構成」 |
 | 集計 | `src/ranking/` | 牌譜 json から対局の結果を取り出し、ランキングを作る。依存のない TypeScript の関数。Lambda と画面の両方で使う。下の「集計（Web サービス）」 |
 | Drive / GAS / スプレッドシート | リポジトリ外（GAS の写しは `gas/`） | 旧方式の牌譜の置き場、投入スクリプト、集計。**Web サービスに置き換えてやめる**（2026-11-19）。シートの構成と集計のルールは下の「旧集計（スプレッドシート）」 |
 
@@ -51,12 +51,56 @@ Admin・Host の認証: Cognito のユーザープール ← Discord（OIDC の 
 | ログイン | Admin・Host は Discord でログインする（メールとパスワードは使わない）。Discord を Cognito の OIDC の IdP にし、画面は Cognito の Hosted UI（`jantama-ranking-auth.methylsatan.com`）へ移って認可コード＋PKCE でトークンを受け取る。許可した Discord の ID（SSM の一覧）でなければ、pre sign-up のトリガーが利用者を作らせない。スコープは `openid identify`（メールは求めない）。Admin かどうかは Cognito のグループ（`admins`）で持つ。操作ログには Cognito の `sub` を書き、Discord の ID・表示名との対応は別に持つ（本人の依頼で消せるように）。接続はタスク 020、主催者の本人確認は行わない（タスク 021）、権限は下の「権限（タスク 022）」（`docs/decisions.md` 2026-11-20 タスク 014） |
 | Terraform | `infra/`。状態は `methylsatan-tfstate` の `jantama-ranking/terraform.tfstate`。Route 53 のゾーン、証明書（us-east-1）、GitHub の OIDC プロバイダーは word-flashcard のものを `data` で参照する。リソースの一覧・手順・OAC の注意は `docs/deploy.md` |
 
-### データモデル（概要。実装で詰める）
-- ランキング（企画）: 名前、公開用の推測されない ID、対象の雀魂アカウント（複数）、集計のルール
-- ランキングの雀魂アカウント（候補を取る元。1つのランキングに複数。主催者のものに限らない）: 雀魂の表示用 ID と内部 ID、最後に候補を更新した時刻（雀魂アカウント単位で持ち、同じアカウントを指す複数のランキングで共有する）。候補は各アカウントの記録を合わせ、牌譜 uuid で重複を除く
-- 対局: 牌譜 uuid、日時、ルール、参加者、状態（候補 / 取り込み済み / 対象外。ランキングごと）、取り込み済みなら各家の順位・点数
-- ランキングの Host と利用者の情報: 下の「権限（タスク 022）」
-- ランキングの JSON: 取り込みのたびに作り直して S3 に置き、CloudFront から配る（閲覧で Lambda を動かさない）
+### データモデル（2026-11-25 にタスク 013 の分割で設計。実装はタスク 024・025）
+DynamoDB のテーブルは `pk`/`sk` のまま、GSI は足さない。件数が小さいので、一覧は一覧用の項目で引く（Scan は使わない）。
+
+| 項目 | `pk` | `sk` | 主な属性 |
+|---|---|---|---|
+| ランキング | `RANKING#<ID>` | `META` | 名前、公開 ID、状態（公開 / 削除）、作成者の sub・時刻 |
+| ランキングの一覧（Admin 用） | `RANKINGS` | `RANKING#<ID>` | 名前、状態 |
+| ランキングの雀魂アカウント | `RANKING#<ID>` | `ACCOUNT#<表示用 ID>` | 内部 ID（最初の候補の更新で引く）、追加した人の sub・時刻 |
+| 雀魂アカウント（ランキングをまたいで共有） | `MAJSOUL#<内部 ID>` | `META` | 最後に候補を更新した時刻、名前 |
+| 雀魂アカウント → ランキング | `MAJSOUL#<内部 ID>` | `RANKING#<ID>` | （候補を更新したときの配り先） |
+| 雀魂アカウントの一覧（定期取得用） | `MAJSOULS` | `MAJSOUL#<内部 ID>` | |
+| 候補の対局（雀魂アカウントごと） | `MAJSOUL#<内部 ID>` | `GAME#<牌譜 uuid>` | 開始・終了時刻、四麻/三麻、`sub_tag`、参加者 |
+| 対局の状態（ランキングごと） | `RANKING#<ID>` | `GAME#<牌譜 uuid>` | 状態（取り込み済み / 対象外）、取り込み済みなら `GameResult`、変えた人の sub・時刻 |
+| 操作ログ | `RANKING#<ID>` | `LOG#<ISO 時刻>#<乱数>` | sub、`via`、操作、対象、内容 |
+| Host・逆向きの項目・利用者の情報 | 下の「権限（タスク 022）」 | | |
+| ロック | `LOCK` | `MAJSOUL` | 持ち主のジョブ ID、期限（条件付き書き込み） |
+| ジョブ | `JOB#<ID>` | `META` | 種類、ランキング ID、状態（待ち / 実行中 / 完了 / 失敗）、進み具合、結果、作成者の sub |
+
+- 候補は、ランキングの雀魂アカウントたちの候補の対局を牌譜 uuid で合わせ、そのランキングで状態の項目を持つ対局を除いたもの。状態の項目が無ければ候補。同じ雀魂アカウントの対局を、別のランキングでは違う扱いにできる
+- 最後に候補を更新した時刻は雀魂アカウント単位（同じアカウントを指す複数のランキングで共有する）
+- 雀魂アカウントの指定は、表示用 ID を保存するだけで雀魂に要求しない。内部 ID は最初の候補の更新のジョブで引く
+- 集計は、ランキングの `GAME#` の項目を1回の Query で読み、取り込み済みの `GameResult` から作る
+- 操作ログはランキングごとに持つ。Admin が全体を見るときは、ランキングごとに引いて合わせる
+- 牌譜（head）は data バケットの `records/<牌譜 uuid>.json` に置く（ランキングをまたいで1つ）。作り直しは、取り込み済みの uuid ごとに S3 の牌譜から `GameResult` を作り直す
+- ランキングの JSON: 取り込みのたびに作り直し、site バケットの `rankings/<公開 ID>.json` に置いて CloudFront から配る（閲覧で Lambda を動かさない）。公開 ID はランキング ID と別の推測されない値にし、取り直せるようにする。取り直したときの古い JSON の扱いはタスク 025 で決める（今の IAM に `DeleteObject` は無い）
+
+### API（案。タスク 024・025 で実装しながら詰める）
+| 要求 | 内容 |
+|---|---|
+| `GET /api/me` | sub、Admin か、操作の許可の表（画面がボタンを出し分ける） |
+| `GET` / `POST /api/rankings` | ランキングの一覧（Admin は全部、Host は付いているもの）・作成 |
+| `GET` / `PATCH` / `DELETE /api/rankings/{id}` | 取得・名前の変更・削除（非公開にする） |
+| `PUT` / `DELETE /api/rankings/{id}/accounts/{表示用 ID}` | 雀魂アカウントの指定・外す |
+| `GET /api/rankings/{id}/games?state=candidate\|imported\|excluded` | 対局の一覧 |
+| `POST /api/rankings/{id}/refresh` | 候補の更新（ジョブ） |
+| `POST /api/rankings/{id}/import` | 取り込み（牌譜 uuid の配列。ジョブ） |
+| `POST /api/rankings/{id}/rebuild` | 牌譜からの作り直し（ジョブ） |
+| `POST /api/rankings/{id}/games/{uuid}/exclude` / `restore` | 対象外にする・戻す（すぐ終わる。ランキングの JSON を作り直す） |
+| `POST /api/rankings/{id}/public-id` | 公開 ID の取り直し |
+| `GET /api/rankings/{id}/logs` | 操作ログ |
+| `GET /api/jobs/{id}` | ジョブの状態 |
+
+- 認証は `x-auth-token` ヘッダーの Cognito の JWT（`docs/deploy.md`「API と OAC」）。判断は `authorize()`（下の「権限（タスク 022）」）
+
+### 非同期の処理（タスク 025）
+雀魂への要求は CloudFront の応答待ち（既定30秒）を超えうるので、ジョブにする。
+1. API がジョブの項目を作り、自分の Lambda を非同期（`InvocationType: Event`、入力 `{"source":"job","jobId":…}`）で起動して、202 とジョブ ID を返す
+2. 起動された Lambda がロックを取り、雀魂に要求し、ジョブの項目に進み具合と結果を書く
+3. 画面はジョブの状態を数秒おきに見る
+- 定期取得（Scheduler の `{"source":"scheduler","action":"refresh-candidates"}`）も同じ処理を通す
 
 ### 作り直し・取り消し・履歴（`docs/product.md` 非機能要件「旧方式の利点を引き継ぐ」）
 - 牌譜の生の json を置く S3 はバージョニングを有効にする。対局の結果とランキングは、牌譜から作る派生データとして扱う
@@ -193,7 +237,7 @@ Admin・Host の認証: Cognito のユーザープール ← Discord（OIDC の 
 | `liqi.ts` | 定義の Lua の復号（鍵は呼び出し側から）、protobufjs の JSON への変換、使っている型の比較 |
 | `connection.ts` / `login.ts` | WebSocket と L2 のログイン。応答に定義に無い項目番号があればログに残す |
 
-- 呼び出し側が渡すもの（`CollectorDeps`）: 雀魂のバージョンと定義の置き場所（`store`。Lambda では S3、CLI ではファイル）、認証情報（Lambda では SSM、CLI では秘密ファイル）、定義の鍵、通知の送り先。取り込み済み・対象外の記録と、同時に実行しないためのロックも呼び出し側が持つ（タスク 013）
+- 呼び出し側が渡すもの（`CollectorDeps`）: 雀魂のバージョンと定義の置き場所（`store`。Lambda では S3、CLI ではファイル）、認証情報（Lambda では SSM、CLI では秘密ファイル）、定義の鍵、通知の送り先。取り込み済み・対象外の記録と、同時に実行しないためのロックも呼び出し側が持つ（タスク 025）
 - 主催者は、表示用 ID（`searchAccountByEid` で内部 ID を引く）か内部 ID で指定する。Web サービスでは内部 ID を保存して使う（要求が1回減る）
 - 候補: uuid、開始・終了時刻、四麻/三麻、`sub_tag`、参加者（席・名前・内部 ID・順位）。一覧が40件以上なら「上限が近い」、50件ちょうどで一番古い対局が未処理なら「取りこぼしたおそれ」と警告する
 - 一覧の `sub_tag` は牌譜の `config.mode.mode` と同じ値（2026-11-19 に60件で確認）。一の位が 1 なら東風、2 なら半荘。十の位は三麻とみられる（11・12）。4 の意味は未確認

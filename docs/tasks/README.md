@@ -17,7 +17,7 @@
 | [010](010-aws-infra.md) | AWS 基盤（Terraform とデプロイ） | 008、011 | done |
 | [011](011-lambda-majsoul-connectivity.md) | Lambda から雀魂に接続できるかの確認 | 007、008 | done |
 | [012](012-ranking-rules.md) | 集計ルールの移植 | 003 | done |
-| [013](013-web-ui.md) | Web サービスの画面と API | 006、010、012、020、022 | todo |
+| [013](013-web-ui.md) | Web サービスの画面と API（024〜028 に分割した親タスク） | 024〜028 | doing |
 | [014](014-x-login.md) | X ログインの調査（主催者への開放。Discord に決定） | - | done |
 | [015](015-legacy-data-migration.md) | 旧方式の牌譜（Drive）の移行 | 012、013 | todo |
 | [016](016-client-version-tracking.md) | 雀魂のバージョンへの追従 | 011 | done |
@@ -28,6 +28,11 @@
 | [021](021-host-verification.md) | 主催者の本人確認（行わないと決定） | 020、022 | done |
 | [022](022-authorization-design.md) | 権限の設計 | 020 | done |
 | [023](023-open-to-hosts.md) | 主催者への開放（Host の付け外しと許可の一覧） | 013、022 | todo |
+| [024](024-api-foundation.md) | API の土台（認証・権限・ランキングの管理） | 020、022 | todo |
+| [025](025-refresh-and-import.md) | 候補の更新と取り込み（雀魂への要求） | 024、006、012 | todo |
+| [026](026-admin-ui.md) | 管理の画面 | 024、025 | todo |
+| [027](027-viewer-ui.md) | 閲覧者の画面 | 025、026 | todo |
+| [028](028-enable-daily-refresh.md) | 定期取得の有効化 | 025 | todo |
 
 ## 新しいタスクの作り方
 - ファイル名は `NNN-短い名前.md`（連番）。この表にも行を足す
