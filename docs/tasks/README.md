@@ -25,7 +25,7 @@
 | [018](018-new-host-history.md) | 新しい主催者の過去分の取り込み（優先度は最低） | 006 | todo |
 | [019](019-language-and-ui-stack.md) | 言語と画面の技術の選び直し | 008、012 | done |
 | [020](020-discord-login.md) | Discord ログインの接続 | 014 | done |
-| [021](021-host-verification.md) | 主催者の本人確認 | 020、022 | todo |
+| [021](021-host-verification.md) | 主催者の本人確認（行わないと決定） | 020、022 | done |
 | [022](022-authorization-design.md) | 権限の設計 | 020 | done |
 | [023](023-open-to-hosts.md) | 主催者への開放（Host の付け外しと許可の一覧） | 013、022 | todo |
 
