@@ -309,3 +309,123 @@ form.inline,
     padding: 0.4rem 0.25rem;
   }
 }
+
+/* 閲覧の画面（ranking.html。タスク 027） */
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  align-items: flex-end;
+  margin: 0.75rem 0;
+}
+
+.filters label {
+  margin-bottom: 0;
+}
+
+select {
+  font: inherit;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.segmented {
+  display: inline-flex;
+}
+
+.segmented button {
+  border-radius: 0;
+}
+
+.segmented button:first-child {
+  border-radius: 6px 0 0 6px;
+}
+
+.segmented button:last-child {
+  border-radius: 0 6px 6px 0;
+  border-left: none;
+}
+
+.segmented button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg);
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table.ranking th,
+table.ranking td {
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+table.ranking td.name {
+  white-space: normal;
+  word-break: break-all;
+  min-width: 6rem;
+}
+
+table.ranking .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+table.ranking .center {
+  text-align: center;
+}
+
+table.ranking tbody tr:nth-child(even) {
+  background: var(--card);
+}
+
+th button.sort {
+  border: none;
+  background: none;
+  padding: 0;
+  font-weight: bold;
+  color: inherit;
+  white-space: nowrap;
+}
+
+th button.sort .arrow {
+  display: inline-block;
+  width: 1em;
+  font-size: 0.75em;
+  color: var(--accent);
+}
+
+.joined {
+  margin: 0.5rem 0;
+  word-break: break-all;
+}
+
+@media (max-width: 40rem) {
+  table.ranking {
+    font-size: 0.85rem;
+  }
+
+  table.ranking th,
+  table.ranking td {
+    padding: 0.4rem 0.15rem;
+  }
+
+  /* 見出しは折り返して、列の幅を数字に合わせる */
+  table.ranking th,
+  th button.sort {
+    white-space: normal;
+  }
+
+  th button.sort .arrow {
+    width: auto;
+  }
+
+  table.ranking td.name {
+    min-width: 4rem;
+  }
+}
