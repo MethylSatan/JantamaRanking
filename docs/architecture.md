@@ -44,7 +44,7 @@ Admin・Host の認証: Cognito のユーザープール ← Discord（OIDC の 
 ### 構成要素
 | 要素 | 内容 |
 |---|---|
-| 画面 | SPA（Vite + TypeScript + Preact。`docs/decisions.md` 2026-11-20 タスク 019）。Admin・Host 向け: 雀魂アカウント（複数可）の指定 → 候補の対局の一覧 → 取り込む対局を選ぶ。Viewer 向け: ランキング |
+| 画面 | Vite + TypeScript + Preact（`docs/decisions.md` 2026-11-20 タスク 019）。ページごとの入口（管理は `admin.html`、閲覧は `ranking.html`（タスク 027））。Admin・Host 向け: 雀魂アカウント（複数可）の指定 → 候補の対局の一覧 → 取り込む対局を選ぶ（下の「管理の画面」）。Viewer 向け: ランキング |
 | API（Lambda） | 候補の更新（雀魂から一覧を取る）、取り込み（選んだ対局の中身を取り、結果を保存し、ランキングを作り直す）、対象外にする操作 |
 | 定期取得 | 1日1回程度、登録した雀魂アカウントの候補を更新する。一覧は種類ごとに最新50件なので、上限に達する前に取りこぼさないため |
 | 認証情報 | システム用の雀魂アカウントの `code` / `uid`（と端末 ID）。取り直しはタスク 009 |
@@ -99,6 +99,23 @@ DynamoDB のテーブルは `pk`/`sk` のまま、GSI は足さない。件数�
 - 認証は `x-auth-token` ヘッダーの Cognito のアクセストークン（`docs/deploy.md`「API と OAC」）。`src/api/jwt.ts` が署名（RS256、JWKS）・発行者・`token_use=access`・`client_id`・期限を確かめる。判断は `authorize()`（下の「権限（タスク 022）」）
 - 応答: トークンが無い・正しくない 401、表で許されない 403、ランキングが無い・付いていない 404、入力の誤り 400
 - 利用者の情報（`USER#<sub>` / `PROFILE`）は 024 では書かない。アクセストークンに Discord の ID・名前が無く、使うのは Host の付け外し（タスク 023）なので、023 で決める
+
+### 管理の画面（タスク 026）
+`web/`（Vite の root）。入口は `web/admin.html`、出力は `dist/web/`。`web/public/` の `index.html`・`privacy.html`・`robots.txt` はそのままコピーする。
+
+| ファイル | 内容 |
+|---|---|
+| `src/App.tsx` | ログイン → ランキングの一覧（`#/`）→ ランキング（`#/r/<ID>`）。ハッシュで切り替える（ルーターのライブラリは使わない） |
+| `src/RankingList.tsx` | 一覧（削除＝非公開も別に出す）と作成 |
+| `src/RankingPage.tsx` | タブ: 候補 / 取り込み済み / 対象外 / 操作ログ / 設定（名前、雀魂アカウント、公開 URL、作り直し、削除）。時間のかかる操作は処理（ジョブ）の進み具合と結果を出す |
+| `src/lib/auth.ts` | Hosted UI へのログイン（認可コード＋PKCE）、トークンの保存（sessionStorage の `tokens`）と取り直し（期限の1分前、または 401 のとき） |
+| `src/lib/api.ts` | API の呼び出し（`x-auth-token`、GET 以外は `x-amz-content-sha256`）。応答の誤りを利用者向けの文に直す。API の型は `src/api` から `import type` で使う |
+| `src/lib/permissions.ts` | `/api/me` の表と役割（Admin か、ランキングの `via`）から、できる操作を決める。できない操作のボタンは出さない |
+| `src/lib/format.ts` / `job.ts` | 日時・種類・操作ログ・処理の結果の文。処理の終わりを3秒おきに見る |
+
+- 画面の文では Admin を「管理人」、Host を「主催者」と書く。uuid・ジョブ・API などの言葉は出さない
+- 公開 URL は `https://jantama-ranking.methylsatan.com/ranking.html?id=<公開 ID>`（閲覧の画面はタスク 027）
+- 純粋な処理（`src/lib/*.ts`）は `node --test` で確かめる（`npm test` に含む）。型は `npm run typecheck` が `web/tsconfig.json` でも確かめる
 
 ### 取り込みの手順（Admin・Host から見た流れ。タスク 025）
 1. ランキングを作り、雀魂アカウント（表示用 ID）を指定する

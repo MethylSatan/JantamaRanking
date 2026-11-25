@@ -15,6 +15,8 @@ Vtuber の東風乃ちのさんのメン限友人戦向けに作ったもの。2
 ## コマンド
 リポジトリ直下（集計 `src/ranking/`、牌譜回収 `src/collector/`。Node 26 で `.ts` を直接実行する）:
 - `npm install` / `npm test`（`node --test`）/ `npm run typecheck`
+- `npm run dev`: 管理の画面を手元で立てる（Vite、`http://localhost:5173/admin.html`。API は本番に向く。`docs/deploy.md`「手元の開発」）
+- `npm run build:web`: 画面を `dist/web/` にビルドする（Vite + Preact。ソースは `web/`）
 - `npm run build:api`: Lambda 用に `src/api/handler.ts` を `dist/api/index.mjs` にまとめる（esbuild）
 - `npm run apicheck -- smoke`: 本番の API を Admin のトークンで確かめる（`login` / `smoke` / `call`。`docs/deploy.md`「確認」）
 - `node src/collector/cli.ts <コマンド>`: 牌譜回収を手元で試す（`candidates` / `fetch` / `exclude` / `update-static`）。状態は `local/collector/`。手順は `docs/collector.md`

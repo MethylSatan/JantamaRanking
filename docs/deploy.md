@@ -5,7 +5,7 @@ URL: `https://jantama-ranking.methylsatan.com`（名前の経緯は `docs/decisi
 ## 構成
 ```
 GitHub (master へ push)
-  └ GitHub Actions: test → typecheck → API をバンドル → 画面を S3 へ sync → Lambda のコードを更新 → CloudFront を無効化
+  └ GitHub Actions: test → typecheck → API をバンドル → 画面をビルド（Vite。`dist/web`）→ S3 へ sync → Lambda のコードを更新 → CloudFront を無効化
         └ OIDC で IAM ロール jantama-ranking-deploy を引き受ける（長期キーなし）
 
 ブラウザ → jantama-ranking.methylsatan.com（Route 53 の ALIAS）
@@ -28,7 +28,7 @@ Cognito ユーザープール jantama-ranking（Lite プラン。ログインは
 - Lambda のコードは GitHub Actions が更新する。Terraform は最初に仮のコード（503 を返す）で作るだけで、以降のコードの変更は無視する（`lifecycle.ignore_changes`）
 
 ## 検索避け
-- `web/public/index.html` の `robots` メタ、`web/public/robots.txt`（全拒否）、CloudFront Functions（`jantama-ranking-noindex`）が画面にも API にも付ける応答ヘッダー `X-Robots-Tag: noindex, nofollow, noarchive`
+- 画面の各ページ（`web/public/index.html`・`web/admin.html` など）の `robots` メタ、`web/public/robots.txt`（全拒否）、CloudFront Functions（`jantama-ranking-noindex`）が画面にも API にも付ける応答ヘッダー `X-Robots-Tag: noindex, nofollow, noarchive`
 - 証明書はワイルドカード（word-flashcard のもの）なので、CT ログにサブドメイン名は載らない
 
 ## API と OAC（タスク 024〜027 で気をつけること）
@@ -118,19 +118,25 @@ rm -rf $t
   aws cognito-idp admin-add-user-to-group --user-pool-id $(terraform -chdir=infra output -raw user_pool_id) --username <利用者名> --group-name admins
   ```
   グループはトークンに入るので、入れた後はログインし直す。連携の利用者は、Cognito が自動で作る `<ユーザープール ID>_Discord` のグループにも入る（Admin の判定には使わない）
-- 手元でログインを確かめるときは、`python3 -I -m http.server 5173 --bind 127.0.0.1 -d web/public` を立て、Windows のブラウザで `http://localhost:5173/admin.html` を開く（VS Code の中のブラウザはアドレスが変わり、`redirect_mismatch` になる）
+- 手元でログインを確かめるときは、`npm run dev`（Vite。5173番）を立て、Windows のブラウザで `http://localhost:5173/admin.html` を開く（VS Code の中のブラウザはアドレスが変わり、`redirect_mismatch` になる）
 - 許可を取り消すときは、一覧から外し、`aws cognito-idp admin-delete-user` で利用者を消す（Discord の規約: 不要になったデータは消す）
 
 ## 普段のデプロイ
 master に push するだけ（`.github/workflows/deploy.yml`）。手で出すときは、リポジトリ直下で:
 ```
 npm run build:api
+npm run build:web
 python3 -I -c "import zipfile;z=zipfile.ZipFile('dist/api.zip','w',zipfile.ZIP_DEFLATED);z.write('dist/api/index.mjs','index.mjs');z.close()"
-aws s3 sync web/public s3://$(terraform -chdir=infra output -raw bucket) --delete --cache-control "no-cache" --exclude "rankings/*"
+aws s3 sync dist/web s3://$(terraform -chdir=infra output -raw bucket) --delete --cache-control "no-cache" --exclude "rankings/*"
 aws lambda update-function-code --function-name $(terraform -chdir=infra output -raw function_name) --zip-file fileb://dist/api.zip
 aws cloudfront create-invalidation --distribution-id $(terraform -chdir=infra output -raw distribution_id) --paths "/*"
 ```
 - sync は `rankings/*` を除外する（Lambda が書くランキングの JSON を消さない）
+
+## 手元の開発（画面。タスク 026）
+- `npm run dev` で Vite を立てる（`http://localhost:5173/admin.html`）。`/api` は Vite の proxy で本番（`jantama-ranking.methylsatan.com`）へ送るので、**手元でも本番の API・DynamoDB・雀魂への接続を使う**。確かめるときはテスト用のランキングを作り、最後に削除（非公開）にする
+- Cognito のコールバックに `http://localhost:5173/admin.html` を登録してある（`infra/auth.tf`）。ポートは固定（`strictPort`）
+- ビルドは `npm run build:web`（出力は `dist/web/`。`web/public/` の静的ファイルもそのまま入る）
 
 ## 確認
 - `curl -sI https://jantama-ranking.methylsatan.com/`（200、`x-robots-tag: noindex, nofollow, noarchive`）
@@ -139,6 +145,7 @@ aws cloudfront create-invalidation --distribution-id $(terraform -chdir=infra ou
 - API の中身（Admin のトークンで）: `npm run apicheck -- smoke`。テスト用のランキングを作り、操作して、最後に削除（非公開）にする。任意の要求は `npm run apicheck -- call GET /api/me`
 - 候補の更新から取り込みまで（タスク 025）: `npm run apicheck -- flow <表示用ID> [取り込む件数]`。テスト用のランキングに雀魂アカウントを指定し、候補の更新 → 取り込み → 公開の URL のランキングの JSON → 対象外・戻す → 作り直し → 公開 ID の取り直しを確かめ、最後に削除（非公開）にする。**雀魂へのログインが2回起きる**（候補の更新と取り込み）。牌譜は S3 の `records/` に残る
   - トークンは `local/apicheck/tokens.json`（Cognito のリフレッシュトークン。既定で30日）。無い・切れたときは `npm run apicheck -- login`: Playwright がブラウザを開くので、Discord のログインだけ手で行う（入力は自動化しない。Discord の規約と CAPTCHA のため）。ブラウザのプロファイルも `local/apicheck/profile` に残す
+  - 管理の画面での同じ流れの確認（タスク 026）は、Playwright で `npm run dev` の画面を開いて行った。`local/apicheck/tokens.json` のリフレッシュトークンを画面の sessionStorage（`tokens`）に入れると、画面がアクセストークンを取り直すので、Discord の入力は要らない
   - Admin でない利用者での確認（403・404）は、Discord のアカウントが1つなので本番ではできない。自動テスト（`src/api/*.test.ts`）で確かめる
 
 ## 注意・メモ

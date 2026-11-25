@@ -28,7 +28,7 @@ Admin（当面）が取り込み・選定をし、閲覧者がランキングを
 ## メモ
 - タスク 010 からの申し送り（`docs/deploy.md`「API と OAC」）: CloudFront の OAC が `Authorization` ヘッダーを上書きするので、Cognito の JWT は別の名前のヘッダーで送る。POST・PUT では本文の SHA-256 を `x-amz-content-sha256` に付ける
 - 基盤にあるもの: Lambda の環境変数 `DATA_BUCKET` / `TABLE_NAME` / `SSM_PREFIX`、DynamoDB（`pk`/`sk`）、ランキングの JSON の置き場（画面用バケットの `rankings/`）、Scheduler `jantama-ranking-daily`（DISABLED。入力は `{"source":"scheduler","action":"refresh-candidates"}`）、Cognito のアプリクライアント（SRP）
-- 画面は今 `web/public/` を sync しているだけ。Vite を入れたら、ワークフローの sync 元をビルド結果に変える
+- 画面は今 `web/public/` を sync しているだけ。Vite を入れたら、ワークフローの sync 元をビルド結果に変える（026 で対応済み。`dist/web/` を sync する）
 - タスク 014 からの申し送り: API は Cognito の JWT を `x-auth-token` ヘッダーで受けて検証し、Admin かどうかは `admins` グループで決める（2026-11-25 に `operators` から改名）。操作ログには Cognito の `sub` を書き、Discord の ID・表示名は書かない（`docs/decisions.md` 2026-11-20 タスク 014）
 - 長い処理（雀魂への要求）は CloudFront の応答待ち（既定30秒）を超えうる。非同期にする案を、2026-11-20 のセッションで検討した（API がジョブを作って Lambda 自身を非同期で起動し、画面が状態を見る）
 - タスク 020 からの申し送り: 管理の画面のコールバックは `admin.html`（本番と `http://localhost:5173/`）。アプリクライアントはシークレットなしで、認可コード＋PKCE（`web/public/admin.html` が仮の実装）。連携の利用者は自動のグループ（`<ユーザープール ID>_Discord`）にも入るので、Admin は `admins` の有無で判定する。操作ログには `sub` を書く（`cognito:username` は Discord の ID を含むので書かない）。`admin.html` は仮のページなので置き換える

@@ -11,7 +11,7 @@
 - `docs/tasks/025-refresh-and-import.md`（ランキングの JSON の形）
 
 ## 作業範囲
-- 公開 URL の形を決める（`/r/<公開 ID>` か `?id=<公開 ID>` など。CloudFront の SPA のルーティングに関わる）
+- 公開 URL は 026 で `/ranking.html?id=<公開 ID>` に決めた（`docs/decisions.md` 2026-11-25 タスク 026）。`web/ranking.html` を Vite の入口に足す（`web/vite.config.ts` の `input`）
 - ランキングの JSON を読み、列ごとの並べ替えと、名前・期間・四麻か三麻かでの絞り込み。今月参加済み・今月まだ打っていない人（旧シートの機能を引き継ぐ。`docs/decisions.md` 2026-11-19 タスク 012）
 - noindex（`meta` と `robots.txt`）。CSV などでの書き出しは用意しない
 - Vite の導入は 026 で済ませたものを使う
@@ -22,4 +22,4 @@
 ## メモ
 - 2026-11-25 に 013 から分けた（`docs/decisions.md` 2026-11-25 タスク 013 の分割）
 - 2026-11-25 タスク 025 からの申し送り: ランキングの JSON は `rankings/<公開 ID>.json`、形は `{ version: 1, name, generatedAt, games: GameResult[] }`（取り込み済みの対局だけ。`docs/architecture.md`「データモデル」）。集計は画面で `src/ranking` の `aggregate`・`playedThisMonth`・`notPlayedThisMonth` を使う。CloudFront の都合で、更新の反映は最大1秒ほど遅れる。削除（非公開）や公開 ID の取り直しの後は、古い URL が 403 になる
-
+- 2026-11-25 タスク 026 からの申し送り: 画面の土台は `web/`（Vite + Preact。`docs/architecture.md`「管理の画面」）。日時の書式などは `web/src/lib/format.ts` にある。`src/ranking` は画面から import してバンドルできる（依存なし）。手元では `npm run dev` で `http://localhost:5173/ranking.html` を開ける。ランキングの JSON は本番の `/rankings/<公開 ID>.json` にしかないので、proxy に `/rankings` を足すと手元で読める
