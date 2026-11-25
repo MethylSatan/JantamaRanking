@@ -101,7 +101,7 @@ DynamoDB のテーブルは `pk`/`sk` のまま、GSI は足さない。件数�
 - 利用者の情報（`USER#<sub>` / `PROFILE`）は 024 では書かない。アクセストークンに Discord の ID・名前が無く、使うのは Host の付け外し（タスク 023）なので、023 で決める
 
 ### 管理の画面（タスク 026）
-`web/`（Vite の root）。入口は `web/admin.html`、出力は `dist/web/`。`web/public/` の `index.html`・`privacy.html`・`robots.txt` はそのままコピーする。
+`web/`（Vite の root）。入口は `web/admin.html`（閲覧は `web/ranking.html`。下の節）、出力は `dist/web/`。`web/public/` の `index.html`・`privacy.html`・`robots.txt` はそのままコピーする。
 
 | ファイル | 内容 |
 |---|---|
@@ -114,8 +114,22 @@ DynamoDB のテーブルは `pk`/`sk` のまま、GSI は足さない。件数�
 | `src/lib/format.ts` / `job.ts` | 日時・種類・操作ログ・処理の結果の文。処理の終わりを3秒おきに見る |
 
 - 画面の文では Admin を「管理人」、Host を「主催者」と書く。uuid・ジョブ・API などの言葉は出さない
-- 公開 URL は `https://jantama-ranking.methylsatan.com/ranking.html?id=<公開 ID>`（閲覧の画面はタスク 027）
+- 公開 URL は `https://jantama-ranking.methylsatan.com/ranking.html?id=<公開 ID>`（閲覧の画面は下の「閲覧の画面（タスク 027）」）
 - 純粋な処理（`src/lib/*.ts`）は `node --test` で確かめる（`npm test` に含む）。型は `npm run typecheck` が `web/tsconfig.json` でも確かめる
+
+### 閲覧の画面（タスク 027）
+入口は `web/ranking.html`（`/ranking.html?id=<公開 ID>`）。ログインは無く、`/rankings/<公開 ID>.json` を読んで画面で集計する（閲覧で Lambda を動かさない）。
+
+| ファイル | 内容 |
+|---|---|
+| `src/ViewerApp.tsx` | 読み込み、四麻 / 三麻、タブ: ランキング / 今月まだの人 |
+| `src/lib/viewer.ts` | JSON の確認、絞り込みの状態と URL のクエリの行き来、並べ替え、名前の絞り込み。集計は `src/ranking` の `aggregate`・`playedThisMonth`・`notPlayedThisMonth` |
+
+- ランキング: 期間（全期間 / 対局のある年と今年 / 期間を指定。初期は今年）と名前（部分一致。全角・半角、大文字・小文字、ひらがな・カタカナを区別しない）で絞る。列は 順位・名前・累計pt・平均pt・対局数・トップ・今月（今月参加済み）。見出しで並べ替え（同じ値は順位の順）。順位は期間で集計したときのままで、名前で絞っても振り直さない
+- 今月まだの人: 今年・選んだ四麻か三麻で `notPlayedThisMonth`。期間と名前の絞り込みは効かない。旧「ちのちゃん向け」シートと同じく、名前を全角スペースでつないだ1行とコピーのボタンを出す
+- 状態は URL のクエリ（`mode`・`year` か `from`/`to`・`q`・`tab`・`sort`・`desc`）に `history.replaceState` で持たせる。URL を渡せば同じ表を開ける。おかしい値は既定に戻す
+- JSON が 403・404（非公開・公開 ID の取り直し）か `id` が無いときは「見つかりません」と出す
+- noindex は `meta` と `robots.txt`（`Disallow: /`）。CSV などの書き出しは無い
 
 ### 取り込みの手順（Admin・Host から見た流れ。タスク 025）
 1. ランキングを作り、雀魂アカウント（表示用 ID）を指定する

@@ -134,9 +134,11 @@ aws cloudfront create-invalidation --distribution-id $(terraform -chdir=infra ou
 - sync は `rankings/*` を除外する（Lambda が書くランキングの JSON を消さない）
 
 ## 手元の開発（画面。タスク 026）
-- `npm run dev` で Vite を立てる（`http://localhost:5173/admin.html`）。`/api` は Vite の proxy で本番（`jantama-ranking.methylsatan.com`）へ送るので、**手元でも本番の API・DynamoDB・雀魂への接続を使う**。確かめるときはテスト用のランキングを作り、最後に削除（非公開）にする
+- `npm run dev` で Vite を立てる（`http://localhost:5173/admin.html`、閲覧は `http://localhost:5173/ranking.html?id=<公開 ID>`）。`/api` と `/rankings` は Vite の proxy で本番（`jantama-ranking.methylsatan.com`）へ送るので、**手元でも本番の API・DynamoDB・雀魂への接続を使う**。確かめるときはテスト用のランキングを作り、最後に削除（非公開）にする
 - Cognito のコールバックに `http://localhost:5173/admin.html` を登録してある（`infra/auth.tf`）。ポートは固定（`strictPort`）
 - ビルドは `npm run build:web`（出力は `dist/web/`。`web/public/` の静的ファイルもそのまま入る）
+- 2026-11-25（タスク 027）: 起動中にファイルを変えても、画面が古いまま（Vite が変更を拾わない）ことが2回あった。おかしいときは `npm run dev` を起動し直す
+- 閲覧の画面は、本番に公開中のランキングが無ければ、Playwright の `page.route` で `/rankings/*.json` を架空の対局（`src/ranking/testdata.ts` の `game`）に差し替えて確かめる
 
 ## 確認
 - `curl -sI https://jantama-ranking.methylsatan.com/`（200、`x-robots-tag: noindex, nofollow, noarchive`）
