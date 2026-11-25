@@ -25,4 +25,6 @@
 - 2026-11-25 タスク 026 からの申し送り: 画面の土台は `web/`（Vite + Preact。`docs/architecture.md`「管理の画面」）。日時の書式などは `web/src/lib/format.ts` にある。`src/ranking` は画面から import してバンドルできる（依存なし）。手元では `npm run dev` で `http://localhost:5173/ranking.html` を開ける。ランキングの JSON は本番の `/rankings/<公開 ID>.json` にしかないので、proxy に `/rankings` を足すと手元で読める
 - 2026-11-25 実装した（`docs/architecture.md`「閲覧の画面（タスク 027）」、`docs/decisions.md` 2026-11-25 タスク 027）。`web/ranking.html`・`web/src/ViewerApp.tsx`・`web/src/lib/viewer.ts`（テストは `viewer.test.ts`）。dev の proxy に `/rankings` を足した
 - 確認（2026-11-25）: `npm test`・`npm run typecheck`・`npm run build:web`（`dist/web/ranking.html` ができる）。本番に公開中のランキングが無かったので、`npm run dev` の画面を Playwright で開き、`/rankings/*.json` を架空の対局に差し替えて確かめた: 並べ替え（逆順、同じ値は順位の順）、四麻 / 三麻、年・全期間・期間の指定、名前（カタカナでひらがなに合う）、URL を別のページで開いて同じ状態、今月まだの人の1行とコピー、幅 375px で横にはみ出さない、存在しない公開 ID（本番の CloudFront が 403）と `id` 無しで「見つかりません」
-- 確かめていないこと: 本番（デプロイ後）の `ranking.html` で、実際のランキングの JSON を読むこと（push の後、テスト用のランキングを公開して確かめる）。ダークモードの見た目
+- 本番での確認（2026-11-25、デプロイ後）: `ranking.html` は 200 で、`x-robots-tag` と `meta` の noindex が付く。テスト用のランキングを作り、名前の変更で対局0件の JSON を公開して表示を確かめた。次に、026 と同じ雀魂アカウントを指定して候補の更新をし、牌譜が保存済みの1件（四麻）だけを取り込んで（雀魂への要求なし）、実際の対局の表・並べ替え・三麻の空の表示・今月まだの人を確かめた。最後に削除（非公開）にし、JSON が 403 になった
+- 雀魂へのログインは2回。apicheck で候補の更新を誤って続けて2回送り、初めての更新は間隔の確認から外れるため両方動いた（タスク 029 に起票）
+- 確かめていないこと: ダークモードの見た目

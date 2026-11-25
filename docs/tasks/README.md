@@ -33,6 +33,7 @@
 | [026](026-admin-ui.md) | 管理の画面 | 024、025 | done |
 | [027](027-viewer-ui.md) | 閲覧者の画面 | 025、026 | done |
 | [028](028-enable-daily-refresh.md) | 定期取得の有効化 | 025 | todo |
+| [029](029-first-refresh-interval.md) | 初めての候補の更新が続けて受け付けられる | 025 | todo |
 
 ## 新しいタスクの作り方
 - ファイル名は `NNN-短い名前.md`（連番）。この表にも行を足す
