@@ -14,7 +14,7 @@ import assert from 'node:assert/strict';
 
 const SITE = 'https://jantama-ranking.methylsatan.com';
 const AUTH_ORIGIN = 'https://jantama-ranking-auth.methylsatan.com';
-// web/public/admin.html と同じアプリクライアント（公開の値）
+// 管理の画面（web/src/lib/auth.ts）と同じアプリクライアント（公開の値）
 const CLIENT_ID = '5f11ktadqh8u5sfeej8r3j5k2v';
 const DIR = 'local/apicheck';
 const TOKENS = `${DIR}/tokens.json`;

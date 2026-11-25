@@ -4,10 +4,12 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "test": "node --test 'src/**/*.test.ts'",
-    "typecheck": "tsc -p .",
+    "test": "node --test 'src/**/*.test.ts' 'web/src/**/*.test.ts'",
+    "typecheck": "tsc -p . && tsc -p web",
     "build:api": "esbuild src/api/handler.ts --bundle --platform=node --target=node24 --format=esm --outfile=dist/api/index.mjs --external:@aws-sdk/* --banner:js=\"import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);\"",
-    "apicheck": "node src/apicheck/cli.ts"
+    "apicheck": "node src/apicheck/cli.ts",
+    "dev": "vite web",
+    "build:web": "vite build web"
   },
   "devDependencies": {
     "@aws-sdk/client-dynamodb": "^3.1176.0",
@@ -15,11 +17,14 @@
     "@aws-sdk/client-s3": "^3.1176.0",
     "@aws-sdk/client-ssm": "^3.1176.0",
     "@aws-sdk/lib-dynamodb": "^3.1176.0",
+    "@preact/preset-vite": "^2.10.6",
     "@types/node": "^24.19.2",
     "@types/ws": "^8.18.2",
     "esbuild": "^0.28.2",
     "playwright": "^1.65.1",
-    "typescript": "~7.0.2"
+    "preact": "^11.2.0",
+    "typescript": "~7.0.2",
+    "vite": "^8.3.8"
   },
   "dependencies": {
     "protobufjs": "^7.6.6",
