@@ -1,4 +1,4 @@
-# 定期取得（1日1回、登録した主催者の候補を更新する）。処理はタスク 013 で作るので、それまでは止めておく
+# 定期取得（1日1回、登録したすべての雀魂アカウントの候補を更新する）。処理は実装済みだが、有効にしないと決めた（docs/decisions.md 2026-11-27 タスク 028）
 data "aws_iam_policy_document" "scheduler_trust" {
   statement {
     actions = ["sts:AssumeRole"]

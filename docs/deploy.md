@@ -15,7 +15,7 @@ GitHub (master へ push)
 Lambda → S3 jantama-ranking-data-<account>（牌譜の json、雀魂のバージョンと定義）
        → DynamoDB jantama-ranking
        → SSM Parameter Store /jantama-ranking/*（認証情報・定義の鍵。値は手で入れる）
-EventBridge Scheduler jantama-ranking-daily → Lambda（1日1回。有効にするかはタスク 028 で決める。それまでは DISABLED）
+EventBridge Scheduler jantama-ranking-daily → Lambda（1日1回。有効にしないと決めた（タスク 028）。DISABLED）
 Cognito ユーザープール jantama-ranking（Lite プラン。ログインは Discord だけ。自己登録なし）
   ├ ログイン画面（Hosted UI）: jantama-ranking-auth.methylsatan.com（Cognito が立てる CloudFront。Route 53 の ALIAS）
   ├ IdP: Discord（OIDC）

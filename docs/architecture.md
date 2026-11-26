@@ -148,7 +148,7 @@ DynamoDB のテーブルは `pk`/`sk` のまま、GSI は足さない。件数�
 1. API がジョブの項目を作り、自分の Lambda を非同期（`InvocationType: Event`、入力 `{"source":"job","jobId":…}`。関数名は `AWS_LAMBDA_FUNCTION_NAME`）で起動して、202 とジョブを返す
 2. 起動された Lambda は、ジョブが `queued` のときだけ `running` に変えて処理する（非同期の起動は2回届きうるため）。ロックを取り、雀魂に要求し、ジョブの項目に進み具合と結果を書く。ロックが使われていれば5秒おきに最大60秒待ち、空かなければ失敗にする。ロックの期限は Lambda の timeout（300秒）より長い360秒
 3. 画面はジョブの状態を数秒おきに見る
-- 定期取得（Scheduler の `{"source":"scheduler","action":"refresh-candidates"}`）も、ジョブの項目を作って同じ処理を通す。登録されたすべての雀魂アカウントの候補を更新する。警告は CloudWatch Logs に `[通知]` 付きで出す（有効にするのはタスク 028）
+- 定期取得（Scheduler の `{"source":"scheduler","action":"refresh-candidates"}`）も、ジョブの項目を作って同じ処理を通す。登録されたすべての雀魂アカウントの候補を更新する。警告は CloudWatch Logs に `[通知]` 付きで出す（有効にしないと決めた。タスク 028）
 - collector の `notify`（定義が変わった、ログインに失敗した など）は、CloudWatch Logs に `[通知]` 付きで出し、ジョブの結果の `notices` にも入れる
 
 ### 作り直し・取り消し・履歴（`docs/product.md` 非機能要件「旧方式の利点を引き継ぐ」）
