@@ -121,12 +121,15 @@ async function logJob(deps: JobDeps, job: Job, detail: Record<string, unknown>) 
   );
 }
 
+/** 一覧に出ていた、その雀魂アカウント自身のニックネーム（`all` は新しい順なので、新しい対局のもの） */
+const selfName = (list: CandidateList): string | undefined =>
+  list.all.flatMap((g) => g.players).find((p) => p.accountId === list.accountId)?.nickname;
+
 /** 一覧を保存する。候補は処理済みも含めて全件を書く（ランキングごとの状態は別に持つ） */
 async function saveList(deps: JobDeps, list: CandidateList) {
   const internalId = String(list.accountId);
-  const self = list.all.flatMap((g) => g.players).find((p) => p.accountId === list.accountId);
   await deps.store.putCandidates(internalId, list.all);
-  await deps.store.markRefreshed(internalId, deps.now().toISOString(), self?.nickname);
+  await deps.store.markRefreshed(internalId, deps.now().toISOString(), selfName(list));
 }
 
 const summarize = (list: CandidateList) => ({
@@ -151,16 +154,22 @@ async function refreshRanking(
     await getSession();
   }
   for (const a of accounts) {
-    await progress(`雀魂アカウント ${a.displayId} の一覧を取っています`);
+    // 表示用 ID は、内部 ID を引くためだけに使う。進み具合・結果・操作ログには出さない（タスク 031）
+    const label = a.name ?? (a.internalId ? `ID ${a.internalId}` : '表示用 ID で指定したアカウント');
+    await progress(`雀魂アカウント ${label} の一覧を取っています`);
     const host: Host = a.internalId ? { accountId: Number(a.internalId) } : { eid: Number(a.displayId) };
+    const ref = a.internalId ? { internalId: a.internalId } : { pendingId: a.pendingId };
     try {
       const list = await listCandidates(await getSession(), host, (u) => known.has(u));
-      if (!a.internalId) await store.linkAccount(rankingId, a.displayId, String(list.accountId));
+      const summary = summarize(list);
+      const name = selfName(list);
+      if (a.pendingId) await store.resolvePendingAccount(rankingId, a.pendingId, summary.internalId, name);
       await saveList(deps, list);
-      results.push({ displayId: a.displayId, ...summarize(list) });
+      results.push({ ...ref, ...summary, ...(name !== undefined ? { name } : {}) });
     } catch (e) {
       // 1つのアカウントの失敗（表示用 ID が見つからない など）で、ほかのアカウントを止めない
-      results.push({ displayId: a.displayId, error: message(e) });
+      const msg = a.displayId ? message(e).split(a.displayId).join('（表示用 ID）') : message(e);
+      results.push({ ...ref, ...(a.name !== undefined ? { name: a.name } : {}), error: msg });
     }
   }
   return { accounts: results };

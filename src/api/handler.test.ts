@@ -52,10 +52,10 @@ test('Admin の一連の操作と操作ログ', async () => {
   // 2回目は何もしない
   const again = await call('PUT', `/api/rankings/${id}/accounts/12345678`, { token: 'admin' });
   assert.equal(again.status, 200);
-  assert.deepEqual(again.body.accounts.map((a: { displayId: string }) => a.displayId), ['12345678']);
+  assert.deepEqual(again.body.accounts.map((a: { internalId: string }) => a.internalId), ['12345678']);
   await call('PUT', `/api/rankings/${id}/accounts/87654321`, { token: 'admin' });
   const removed = await call('DELETE', `/api/rankings/${id}/accounts/12345678`, { token: 'admin' });
-  assert.deepEqual(removed.body.accounts.map((a: { displayId: string }) => a.displayId), ['87654321']);
+  assert.deepEqual(removed.body.accounts.map((a: { internalId: string }) => a.internalId), ['87654321']);
 
   const list = await call('GET', '/api/rankings', { token: 'admin' });
   assert.deepEqual(list.body.rankings, [{ id, name: '半荘戦', state: 'public' }]);
@@ -118,5 +118,9 @@ test('不正な入力は 400', async () => {
   assert.equal((await call('POST', '/api/rankings', { token: 'admin', body: { name: 'あ'.repeat(100) } })).status, 201);
   assert.equal((await call('PUT', `/api/rankings/${id}/accounts/abc`, { token: 'admin' })).status, 400);
   assert.equal((await call('PUT', `/api/rankings/${id}/accounts/%E0%A4%A`, { token: 'admin' })).status, 400);
+  assert.equal((await call('PUT', `/api/rankings/${id}/accounts/0123`, { token: 'admin' })).status, 400);
+  for (const body of [undefined, {}, { displayId: 123 }, { displayId: 'abc' }, { displayId: '1'.repeat(13) }]) {
+    assert.equal((await call('POST', `/api/rankings/${id}/accounts`, { token: 'admin', body })).status, 400, JSON.stringify(body));
+  }
   assert.equal((await call('GET', '/api/rankings/not-a-uuid', { token: 'admin' })).status, 404);
 });

@@ -4,9 +4,10 @@
 import { authorize, authorizeGlobal, isAdmin, PERMISSIONS, type Role, type User } from './authorize.ts';
 import type { Blobs } from './blobs.ts';
 import { HttpError } from './errors.ts';
-import { mergedCandidates, publishRanking } from './games.ts';
+import { randomUUID } from 'node:crypto';
+import { mergedCandidates, publishRanking, rankingPlayers } from './games.ts';
 import { MIN_REFRESH_INTERVAL_MS, newJob, type OpenMajsoul } from './jobs.ts';
-import type { Job, Ranking, RankingSummary, Store } from './store.ts';
+import type { Job, Ranking, RankingAccount, RankingSummary, Store } from './store.ts';
 import { MAX_RECORDS_PER_RUN } from '../collector/index.ts';
 
 export interface Deps {
@@ -63,11 +64,21 @@ const readName = (body: unknown): string => {
   return trimmed;
 };
 
-// 雀魂の表示用 ID（友達追加などで見える数字）
-const readDisplayId = (raw: string): string => {
-  if (!/^\d{1,12}$/.test(raw)) throw new HttpError(400, 'invalid account id');
+// 雀魂の内部 ID（牌譜の参加者の account_id）。表示用 ID（友達追加などで見える数字）とは別
+const readInternalId = (raw: string): string => {
+  if (!/^[1-9]\d{0,11}$/.test(raw)) throw new HttpError(400, 'invalid account id');
   return raw;
 };
+
+// 表示用 ID は URL に入れない（アクセスログなどに残るため）。本文で受け取る
+const readDisplayId = (body: unknown): string => {
+  const v = (body as { displayId?: unknown } | null)?.displayId;
+  if (typeof v !== 'string' || !/^\d{1,12}$/.test(v)) throw new HttpError(400, 'invalid displayId');
+  return v;
+};
+
+// 仮の項目の印は randomUUID()
+const PENDING_ID = '([0-9a-f-]{36})';
 
 const log = (
   ctx: Context,
@@ -92,9 +103,27 @@ const log = (
 
 const summary = (r: Ranking): RankingSummary => ({ id: r.id, name: r.name, state: r.state });
 
+/**
+ * 画面に返す雀魂アカウント。表示用 ID は返さない（タスク 031）。
+ * 名前は、候補の更新で分かったもの（雀魂アカウントの項目）を、指定したときの名前より優先する
+ */
+const accountViews = (store: Store, accounts: RankingAccount[]) =>
+  Promise.all(
+    accounts.map(async (a) => {
+      const m = a.internalId ? await store.getMajsoul(a.internalId) : undefined;
+      const name = m?.name ?? a.name;
+      return {
+        ...(a.internalId ? { internalId: a.internalId } : { pendingId: a.pendingId }),
+        ...(name !== undefined ? { name } : {}),
+        ...(m?.lastRefreshedAt ? { lastRefreshedAt: m.lastRefreshedAt } : {}),
+        addedAt: a.addedAt,
+      };
+    }),
+  );
+
 const detail = async (store: Store, r: Ranking, via: Role) => ({
   ...r,
-  accounts: (await store.listAccounts(r.id)).map((a) => ({ displayId: a.displayId, addedAt: a.addedAt })),
+  accounts: await accountViews(store, await store.listAccounts(r.id)),
   via,
 });
 
@@ -158,26 +187,60 @@ const deleteRanking: Handler = async (ctx, [id]) => {
   return { status: 200, body: await detail(ctx.deps.store, { ...ranking, state: 'deleted' }, via) };
 };
 
-// 雀魂アカウントの指定は表示用 ID を保存するだけで、雀魂に要求しない
-const addAccount: Handler = async (ctx, [id, rawDisplayId]) => {
+// 雀魂アカウントの指定（タスク 031）。どの形でも雀魂には要求しない
+// 内部 ID で指定する（ランキングの対局の参加者から選ぶ、または Admin が直接）。名前は対局から引く
+const addAccount: Handler = async (ctx, [id, rawInternalId]) => {
   const { via, ranking } = await authorize(ctx.user, 'setAccounts', id!, ctx.deps.store);
-  const displayId = readDisplayId(rawDisplayId!);
+  const internalId = readInternalId(rawInternalId!);
+  const name = (await rankingPlayers(ctx.deps.store, ranking.id)).find((p) => p.internalId === internalId)?.name;
   const added = await ctx.deps.store.addAccount(ranking.id, {
-    displayId,
+    internalId,
+    ...(name !== undefined ? { name } : {}),
     addedBy: ctx.user.sub,
     addedAt: ctx.deps.now().toISOString(),
   });
-  if (added) await log(ctx, ranking.id, via, 'addAccount', displayId);
+  if (added) await log(ctx, ranking.id, via, 'addAccount', internalId, name !== undefined ? { name } : undefined);
   return { status: added ? 201 : 200, body: await detail(ctx.deps.store, ranking, via) };
 };
 
-const removeAccount: Handler = async (ctx, [id, rawDisplayId]) => {
+// 表示用 ID で指定する。最初の候補の更新で内部 ID を引くまでの仮の項目にし、引いたら表示用 ID は消す。
+// 表示用 ID は応答・操作ログに出さない。同じ表示用 ID の仮の項目があれば何もしない
+const addAccountByDisplayId: Handler = async (ctx, [id]) => {
   const { via, ranking } = await authorize(ctx.user, 'setAccounts', id!, ctx.deps.store);
-  const displayId = readDisplayId(rawDisplayId!);
-  if (await ctx.deps.store.removeAccount(ranking.id, displayId)) {
-    await log(ctx, ranking.id, via, 'removeAccount', displayId);
+  const displayId = readDisplayId(ctx.body());
+  const { store } = ctx.deps;
+  if ((await store.listAccounts(ranking.id)).some((a) => a.displayId === displayId)) {
+    return { status: 200, body: await detail(store, ranking, via) };
+  }
+  const pendingId = randomUUID();
+  await store.addPendingAccount(ranking.id, { pendingId, displayId, addedBy: ctx.user.sub, addedAt: ctx.deps.now().toISOString() });
+  await log(ctx, ranking.id, via, 'addAccount', undefined, { byDisplayId: true });
+  return { status: 201, body: await detail(store, ranking, via) };
+};
+
+const removeAccount: Handler = async (ctx, [id, rawInternalId]) => {
+  const { via, ranking } = await authorize(ctx.user, 'setAccounts', id!, ctx.deps.store);
+  const internalId = readInternalId(rawInternalId!);
+  const { store } = ctx.deps;
+  const name = (await accountViews(store, (await store.listAccounts(ranking.id)).filter((a) => a.internalId === internalId)))[0]?.name;
+  if (await store.removeAccount(ranking.id, internalId)) {
+    await log(ctx, ranking.id, via, 'removeAccount', internalId, name !== undefined ? { name } : undefined);
+  }
+  return { status: 200, body: await detail(store, ranking, via) };
+};
+
+const removePendingAccount: Handler = async (ctx, [id, pendingId]) => {
+  const { via, ranking } = await authorize(ctx.user, 'setAccounts', id!, ctx.deps.store);
+  if (await ctx.deps.store.removePendingAccount(ranking.id, pendingId!)) {
+    await log(ctx, ranking.id, via, 'removeAccount', undefined, { byDisplayId: true });
   }
   return { status: 200, body: await detail(ctx.deps.store, ranking, via) };
+};
+
+// ランキングの対局の参加者（雀魂アカウントを選んで指定するため）
+const listPlayers: Handler = async (ctx, [id]) => {
+  const { ranking } = await authorize(ctx.user, 'viewRanking', id!, ctx.deps.store);
+  return { status: 200, body: { players: await rankingPlayers(ctx.deps.store, ranking.id) } };
 };
 
 const listLogs: Handler = async (ctx, [id]) => {
@@ -192,17 +255,7 @@ const listGames: Handler = async (ctx, [id]) => {
   const state = ctx.query.state ?? 'candidate';
   if (!(GAME_STATES as readonly string[]).includes(state)) throw new HttpError(400, 'invalid state');
   const { store } = ctx.deps;
-  const accounts = await Promise.all(
-    (await store.listAccounts(ranking.id)).map(async (a) => {
-      const m = a.internalId ? await store.getMajsoul(a.internalId) : undefined;
-      return {
-        displayId: a.displayId,
-        ...(a.internalId ? { internalId: a.internalId } : {}),
-        ...(m?.name !== undefined ? { name: m.name } : {}),
-        ...(m?.lastRefreshedAt ? { lastRefreshedAt: m.lastRefreshedAt } : {}),
-      };
-    }),
-  );
+  const accounts = await accountViews(store, await store.listAccounts(ranking.id));
   if (state === 'candidate') {
     return { status: 200, body: { state, accounts, games: await mergedCandidates(store, ranking.id) } };
   }
@@ -328,8 +381,11 @@ const routes: [method: string, pattern: RegExp, handler: Handler][] = [
   ['GET', new RegExp(`^/api/rankings/${RANKING_ID}$`), getRanking],
   ['PATCH', new RegExp(`^/api/rankings/${RANKING_ID}$`), renameRanking],
   ['DELETE', new RegExp(`^/api/rankings/${RANKING_ID}$`), deleteRanking],
+  ['POST', new RegExp(`^/api/rankings/${RANKING_ID}/accounts$`), addAccountByDisplayId],
+  ['DELETE', new RegExp(`^/api/rankings/${RANKING_ID}/accounts/pending/${PENDING_ID}$`), removePendingAccount],
   ['PUT', new RegExp(`^/api/rankings/${RANKING_ID}/accounts/([^/]+)$`), addAccount],
   ['DELETE', new RegExp(`^/api/rankings/${RANKING_ID}/accounts/([^/]+)$`), removeAccount],
+  ['GET', new RegExp(`^/api/rankings/${RANKING_ID}/players$`), listPlayers],
   ['GET', new RegExp(`^/api/rankings/${RANKING_ID}/logs$`), listLogs],
   ['GET', new RegExp(`^/api/rankings/${RANKING_ID}/games$`), listGames],
   ['POST', new RegExp(`^/api/rankings/${RANKING_ID}/refresh$`), refresh],

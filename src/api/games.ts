@@ -32,7 +32,7 @@ export async function publishRanking(deps: { store: Store; blobs: Blobs; now: ()
 }
 
 export interface MergedCandidate extends CandidateGame {
-  /** この対局が出てきた雀魂アカウント（表示用 ID） */
+  /** この対局が出てきた雀魂アカウント（内部 ID） */
   sources: string[];
 }
 
@@ -46,9 +46,42 @@ export async function mergedCandidates(store: Store, rankingId: string): Promise
     for (const g of await store.listCandidates(a.internalId)) {
       if (known.has(g.uuid)) continue;
       const m = byUuid.get(g.uuid);
-      if (m) m.sources.push(a.displayId);
-      else byUuid.set(g.uuid, { ...g, sources: [a.displayId] });
+      if (m) m.sources.push(a.internalId);
+      else byUuid.set(g.uuid, { ...g, sources: [a.internalId] });
     }
   }
   return [...byUuid.values()].sort((a, b) => b.startTime - a.startTime || (a.uuid < b.uuid ? -1 : 1));
+}
+
+/** ランキングの対局（取り込み済み・対象外の結果と、候補）に出てくる参加者。雀魂アカウントを選んで指定するのに使う（タスク 031） */
+export interface RankingPlayer {
+  internalId: string;
+  /** 一番新しい対局での名前 */
+  name: string;
+  /** 出てくる対局の数 */
+  games: number;
+}
+
+/** 対局の数の多い順（同数は内部 ID の順）。アカウント ID の無い席（AI・旧方式の名前だけの結果）は除く */
+export async function rankingPlayers(store: Store, rankingId: string): Promise<RankingPlayer[]> {
+  const seen = new Map<string, { name: string; time: number; games: Set<string> }>();
+  const add = (uuid: string, time: number, id: number | undefined, name: string) => {
+    if (!id) return;
+    const key = String(id);
+    const p = seen.get(key) ?? seen.set(key, { name, time, games: new Set() }).get(key)!;
+    if (time >= p.time) {
+      p.time = time;
+      p.name = name;
+    }
+    p.games.add(uuid);
+  };
+  for (const s of await store.listGameStates(rankingId)) {
+    for (const p of s.result?.players ?? []) add(s.uuid, s.result!.endTime, p.accountId, p.name);
+  }
+  for (const g of await mergedCandidates(store, rankingId)) {
+    for (const p of g.players) add(g.uuid, g.endTime, p.accountId, p.nickname);
+  }
+  return [...seen]
+    .map(([internalId, p]) => ({ internalId, name: p.name, games: p.games.size }))
+    .sort((a, b) => b.games - a.games || (a.internalId < b.internalId ? -1 : a.internalId > b.internalId ? 1 : 0));
 }

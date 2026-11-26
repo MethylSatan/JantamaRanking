@@ -30,13 +30,25 @@ export interface Ranking {
 
 export type RankingSummary = Pick<Ranking, 'id' | 'name' | 'state'>;
 
-/** ランキングの雀魂アカウント。内部 ID は最初の候補の更新で引く（タスク 025） */
+/**
+ * ランキングの雀魂アカウント（候補の対局を取ってくる元）。内部 ID で持つ（タスク 031）。
+ * 表示用 ID で指定したものは、最初の候補の更新で内部 ID を引くまでの仮の項目（pendingId）で、引いたら消す
+ */
 export interface RankingAccount {
-  displayId: string;
+  /** 仮の項目には無い */
   internalId?: string;
+  /** 表示用 ID で指定して、まだ内部 ID を引いていない項目の印 */
+  pendingId?: string;
+  /** 仮の項目だけが持つ。API の応答・画面・操作ログ・ジョブの結果には出さない */
+  displayId?: string;
+  /** 指定したときに分かっていたニックネーム */
+  name?: string;
   addedBy: string;
   addedAt: string;
 }
+
+export type LinkedAccount = RankingAccount & { internalId: string };
+export type PendingAccount = RankingAccount & { pendingId: string; displayId: string };
 
 export interface LogEntry {
   at: string;
@@ -104,18 +116,25 @@ export interface Store {
   /** Host として付いているランキングの ID（逆向きの項目から） */
   listRankingIdsForUser(sub: string): Promise<string[]>;
   isHost(rankingId: string, sub: string): Promise<boolean>;
-  /** すでにあれば何もせず false */
-  addAccount(rankingId: string, account: RankingAccount): Promise<boolean>;
+  /** 内部 ID で指定する。雀魂アカウント → ランキングと、定期取得用の一覧の項目も作る。すでにあれば何もせず false */
+  addAccount(rankingId: string, account: LinkedAccount): Promise<boolean>;
+  /** 表示用 ID で指定する（仮の項目）。同じ pendingId があれば false */
+  addPendingAccount(rankingId: string, account: PendingAccount): Promise<boolean>;
   /** 無ければ false */
-  removeAccount(rankingId: string, displayId: string): Promise<boolean>;
+  removeAccount(rankingId: string, internalId: string): Promise<boolean>;
+  /** 無ければ false */
+  removePendingAccount(rankingId: string, pendingId: string): Promise<boolean>;
+  /**
+   * 仮の項目を消し、内部 ID の項目にする（同じ内部 ID がもうあれば、仮の項目を消すだけ）。表示用 ID は残さない。
+   * 仮の項目が外されていたら false
+   */
+  resolvePendingAccount(rankingId: string, pendingId: string, internalId: string, name?: string): Promise<boolean>;
   listAccounts(rankingId: string): Promise<RankingAccount[]>;
   appendLog(rankingId: string, entry: LogEntry, suffix: string): Promise<void>;
   /** 新しい順 */
   listLogs(rankingId: string, limit: number): Promise<LogEntry[]>;
 
   updatePublicId(rankingId: string, publicId: string): Promise<void>;
-  /** 表示用 ID に内部 ID を書き、雀魂アカウント → ランキングと、定期取得用の一覧の項目を作る。表示用 ID が外されていたら false */
-  linkAccount(rankingId: string, displayId: string, internalId: string): Promise<boolean>;
   getMajsoul(internalId: string): Promise<MajsoulAccount | undefined>;
   /** 定期取得用。登録されている雀魂アカウントの内部 ID */
   listMajsouls(): Promise<string[]>;
@@ -146,7 +165,8 @@ export const keys = {
   rankingListEntry: (id: string) => ({ pk: 'RANKINGS', sk: `RANKING#${id}` }),
   member: (rankingId: string, sub: string) => ({ pk: `RANKING#${rankingId}`, sk: `MEMBER#${sub}` }),
   userRanking: (sub: string, rankingId: string) => ({ pk: `USER#${sub}`, sk: `RANKING#${rankingId}` }),
-  account: (rankingId: string, displayId: string) => ({ pk: `RANKING#${rankingId}`, sk: `ACCOUNT#${displayId}` }),
+  account: (rankingId: string, internalId: string) => ({ pk: `RANKING#${rankingId}`, sk: `ACCOUNT#${internalId}` }),
+  pendingAccount: (rankingId: string, pendingId: string) => ({ pk: `RANKING#${rankingId}`, sk: `ACCOUNT#PENDING#${pendingId}` }),
   log: (rankingId: string, at: string, suffix: string) => ({ pk: `RANKING#${rankingId}`, sk: `LOG#${at}#${suffix}` }),
   majsoul: (internalId: string) => ({ pk: `MAJSOUL#${internalId}`, sk: 'META' }),
   majsoulRanking: (internalId: string, rankingId: string) => ({ pk: `MAJSOUL#${internalId}`, sk: `RANKING#${rankingId}` }),
@@ -173,8 +193,9 @@ const rankingFromItem = (item: Record<string, any>): Ranking => ({
 });
 
 const accountFromItem = (item: Record<string, any>): RankingAccount => ({
-  displayId: item.displayId,
   ...(item.internalId ? { internalId: item.internalId } : {}),
+  ...(item.pendingId ? { pendingId: item.pendingId, displayId: item.displayId } : {}),
+  ...(item.name !== undefined ? { name: item.name } : {}),
   addedBy: item.addedBy,
   addedAt: item.addedAt,
 });
@@ -288,11 +309,34 @@ export class DynamoStore implements Store {
     return res.Item?.role === 'host';
   }
 
-  async addAccount(rankingId: string, a: RankingAccount) {
+  async addAccount(rankingId: string, a: LinkedAccount) {
+    const { internalId } = a;
+    try {
+      await this.doc.send(new TransactWriteCommand({
+        TransactItems: [
+          {
+            Put: {
+              TableName: this.table,
+              Item: { ...keys.account(rankingId, internalId), ...a },
+              ConditionExpression: 'attribute_not_exists(pk)',
+            },
+          },
+          { Put: { TableName: this.table, Item: { ...keys.majsoulRanking(internalId, rankingId) } } },
+          { Put: { TableName: this.table, Item: { ...keys.majsoulListEntry(internalId), internalId } } },
+        ],
+      }));
+      return true;
+    } catch (e) {
+      if (isConditionalFailure(e)) return false;
+      throw e;
+    }
+  }
+
+  async addPendingAccount(rankingId: string, a: PendingAccount) {
     try {
       await this.doc.send(new PutCommand({
         TableName: this.table,
-        Item: { ...keys.account(rankingId, a.displayId), ...a },
+        Item: { ...keys.pendingAccount(rankingId, a.pendingId), ...a },
         ConditionExpression: 'attribute_not_exists(pk)',
       }));
       return true;
@@ -302,14 +346,40 @@ export class DynamoStore implements Store {
     }
   }
 
-  async removeAccount(rankingId: string, displayId: string) {
+  async removePendingAccount(rankingId: string, pendingId: string) {
     const res = await this.doc.send(new DeleteCommand({
       TableName: this.table,
-      Key: keys.account(rankingId, displayId),
+      Key: keys.pendingAccount(rankingId, pendingId),
       ReturnValues: 'ALL_OLD',
     }));
-    const internalId = res.Attributes?.internalId as string | undefined;
-    if (internalId) {
+    return res.Attributes !== undefined;
+  }
+
+  async resolvePendingAccount(rankingId: string, pendingId: string, internalId: string, name?: string) {
+    // 仮の項目を先に消す（表示用 ID を残さない）。消してから足すまでの間に失敗したら、指定し直してもらう
+    const res = await this.doc.send(new DeleteCommand({
+      TableName: this.table,
+      Key: keys.pendingAccount(rankingId, pendingId),
+      ReturnValues: 'ALL_OLD',
+    }));
+    const old = res.Attributes;
+    if (!old) return false;
+    await this.addAccount(rankingId, {
+      internalId,
+      ...(name !== undefined ? { name } : {}),
+      addedBy: old.addedBy,
+      addedAt: old.addedAt,
+    });
+    return true;
+  }
+
+  async removeAccount(rankingId: string, internalId: string) {
+    const res = await this.doc.send(new DeleteCommand({
+      TableName: this.table,
+      Key: keys.account(rankingId, internalId),
+      ReturnValues: 'ALL_OLD',
+    }));
+    if (res.Attributes) {
       await this.doc.send(new DeleteCommand({ TableName: this.table, Key: keys.majsoulRanking(internalId, rankingId) }));
       // どのランキングからも指されなくなったら、定期取得の一覧から外す
       if ((await this.listRankingIdsForMajsoul(internalId)).length === 0) {
@@ -354,30 +424,6 @@ export class DynamoStore implements Store {
       ExpressionAttributeValues: { ':p': publicId },
       ConditionExpression: 'attribute_exists(pk)',
     }));
-  }
-
-  async linkAccount(rankingId: string, displayId: string, internalId: string) {
-    try {
-      await this.doc.send(new TransactWriteCommand({
-        TransactItems: [
-          {
-            Update: {
-              TableName: this.table,
-              Key: keys.account(rankingId, displayId),
-              UpdateExpression: 'SET internalId = :i',
-              ExpressionAttributeValues: { ':i': internalId },
-              ConditionExpression: 'attribute_exists(pk)',
-            },
-          },
-          { Put: { TableName: this.table, Item: { ...keys.majsoulRanking(internalId, rankingId), displayId } } },
-          { Put: { TableName: this.table, Item: { ...keys.majsoulListEntry(internalId), internalId } } },
-        ],
-      }));
-      return true;
-    } catch (e) {
-      if (isConditionalFailure(e)) return false;
-      throw e;
-    }
   }
 
   async getMajsoul(internalId: string) {

@@ -9,6 +9,8 @@ import {
   type JobStatus,
   type LogEntry,
   type Ranking,
+  type LinkedAccount,
+  type PendingAccount,
   type RankingAccount,
   type Store,
 } from './store.ts';
@@ -74,23 +76,42 @@ export class MemoryStore implements Store {
     return this.get(keys.member(rankingId, sub))?.role === 'host';
   }
 
-  async addAccount(rankingId: string, a: RankingAccount) {
-    const k = keys.account(rankingId, a.displayId);
+  async addAccount(rankingId: string, a: LinkedAccount) {
+    const k = keys.account(rankingId, a.internalId);
+    if (this.get(k)) return false;
+    this.put(k, a);
+    this.put(keys.majsoulRanking(a.internalId, rankingId), {});
+    this.put(keys.majsoulListEntry(a.internalId), { internalId: a.internalId });
+    return true;
+  }
+
+  async addPendingAccount(rankingId: string, a: PendingAccount) {
+    const k = keys.pendingAccount(rankingId, a.pendingId);
     if (this.get(k)) return false;
     this.put(k, a);
     return true;
   }
 
-  async removeAccount(rankingId: string, displayId: string) {
-    const k = keys.account(rankingId, displayId);
+  async removePendingAccount(rankingId: string, pendingId: string) {
+    return this.items.delete(this.id(keys.pendingAccount(rankingId, pendingId)));
+  }
+
+  async resolvePendingAccount(rankingId: string, pendingId: string, internalId: string, name?: string) {
+    const k = keys.pendingAccount(rankingId, pendingId);
     const old = this.get(k);
     if (!old) return false;
     this.items.delete(this.id(k));
-    if (old.internalId) {
-      this.items.delete(this.id(keys.majsoulRanking(old.internalId, rankingId)));
-      if ((await this.listRankingIdsForMajsoul(old.internalId)).length === 0) {
-        this.items.delete(this.id(keys.majsoulListEntry(old.internalId)));
-      }
+    await this.addAccount(rankingId, { internalId, ...(name !== undefined ? { name } : {}), addedBy: old.addedBy, addedAt: old.addedAt });
+    return true;
+  }
+
+  async removeAccount(rankingId: string, internalId: string) {
+    const k = keys.account(rankingId, internalId);
+    if (!this.get(k)) return false;
+    this.items.delete(this.id(k));
+    this.items.delete(this.id(keys.majsoulRanking(internalId, rankingId)));
+    if ((await this.listRankingIdsForMajsoul(internalId)).length === 0) {
+      this.items.delete(this.id(keys.majsoulListEntry(internalId)));
     }
     return true;
   }
@@ -116,15 +137,6 @@ export class MemoryStore implements Store {
     const meta = this.get(keys.ranking(rankingId));
     if (!meta) throw new Error('ConditionalCheckFailed');
     meta.publicId = publicId;
-  }
-
-  async linkAccount(rankingId: string, displayId: string, internalId: string) {
-    const account = this.get(keys.account(rankingId, displayId));
-    if (!account) return false;
-    account.internalId = internalId;
-    this.put(keys.majsoulRanking(internalId, rankingId), { displayId });
-    this.put(keys.majsoulListEntry(internalId), { internalId });
-    return true;
   }
 
   async getMajsoul(internalId: string) {

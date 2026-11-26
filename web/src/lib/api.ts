@@ -18,16 +18,27 @@ export interface Me {
   permissions: Record<Operation, { scope: 'global' | 'ranking'; roles: readonly Role[] }>;
 }
 
+/** ランキングの雀魂アカウント。内部 ID か、表示用 ID で指定してまだ確かめていない仮の項目（pendingId）。表示用 ID は来ない */
+export interface AccountView {
+  internalId?: string;
+  pendingId?: string;
+  name?: string;
+  lastRefreshedAt?: string;
+  addedAt: string;
+}
+
 export interface RankingDetail extends Ranking {
-  accounts: { displayId: string; addedAt: string }[];
+  accounts: AccountView[];
   via: Role;
 }
 
-export interface GamesAccount {
-  displayId: string;
-  internalId?: string;
-  name?: string;
-  lastRefreshedAt?: string;
+export type GamesAccount = AccountView;
+
+/** ランキングの対局の参加者（雀魂アカウントを選んで指定する） */
+export interface Player {
+  internalId: string;
+  name: string;
+  games: number;
 }
 
 export type GameListState = 'candidate' | 'imported' | 'excluded';
@@ -126,10 +137,16 @@ export const api = {
   getRanking: (id: string) => call<RankingDetail>('GET', r(id)),
   renameRanking: (id: string, name: string) => call<RankingDetail>('PATCH', r(id), { name }),
   deleteRanking: (id: string) => call<RankingDetail>('DELETE', r(id)),
-  addAccount: (id: string, displayId: string) =>
-    call<RankingDetail>('PUT', `${r(id)}/accounts/${encodeURIComponent(displayId)}`),
-  removeAccount: (id: string, displayId: string) =>
-    call<RankingDetail>('DELETE', `${r(id)}/accounts/${encodeURIComponent(displayId)}`),
+  addAccount: (id: string, internalId: string) =>
+    call<RankingDetail>('PUT', `${r(id)}/accounts/${encodeURIComponent(internalId)}`),
+  /** 表示用 ID は URL に入れず、本文で送る */
+  addAccountByDisplayId: (id: string, displayId: string) => call<RankingDetail>('POST', `${r(id)}/accounts`, { displayId }),
+  removeAccount: (id: string, a: AccountView) =>
+    call<RankingDetail>(
+      'DELETE',
+      a.internalId ? `${r(id)}/accounts/${encodeURIComponent(a.internalId)}` : `${r(id)}/accounts/pending/${encodeURIComponent(a.pendingId ?? '')}`,
+    ),
+  listPlayers: (id: string) => call<{ players: Player[] }>('GET', `${r(id)}/players`),
   listGames: (id: string, state: GameListState) => call<GamesResponse>('GET', `${r(id)}/games?state=${state}`),
   refresh: (id: string) => call<{ job: Job }>('POST', `${r(id)}/refresh`),
   importGames: (id: string, uuids: string[]) => call<{ job: Job }>('POST', `${r(id)}/import`, { uuids }),

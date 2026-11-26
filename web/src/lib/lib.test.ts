@@ -64,14 +64,18 @@ test('処理の結果の要約', () => {
     status: 'done',
     result: {
       accounts: [
-        { displayId: '1', internalId: '9', returned: { '4p': 42, '3p': 0 }, newCandidates: 3, warnings: ['四麻: 一覧が42件'] },
-        { displayId: '2', error: 'not found' },
+        { internalId: '9', name: '主催', returned: { '4p': 42, '3p': 0 }, newCandidates: 3, warnings: ['四麻: 一覧が42件'] },
+        { pendingId: 'p', error: '表示用 ID のアカウントが見つからない' },
       ],
       notices: ['定義が変わった'],
     },
   });
-  assert.deepEqual(refresh.lines, ['ID 1: 四麻42件・三麻0件、新しい候補3件']);
+  assert.deepEqual(refresh.lines, ['主催: 四麻42件・三麻0件、新しい候補3件']);
   assert.equal(refresh.warnings.length, 3);
+  assert.match(refresh.warnings[2], /^雀魂アカウント 表示用 ID で指定したアカウント/);
+  assert.equal(logSummary({ at: '', sub: 's', via: 'admin', op: 'addAccount', target: '9', detail: { name: '主催' } }), '主催');
+  assert.equal(logSummary({ at: '', sub: 's', via: 'admin', op: 'removeAccount', target: '9' }), 'ID 9');
+  assert.equal(logSummary({ at: '', sub: 's', via: 'admin', op: 'addAccount', detail: { byDisplayId: true } }), '表示用 ID で指定');
   const imp = jobSummary({ kind: 'import', status: 'done', result: { imported: ['a', 'b'], skipped: [], missing: ['c'], failed: [] } });
   assert.deepEqual(imp.lines, ['2件を取り込みました', '1件は雀魂から牌譜を取れませんでした']);
   assert.deepEqual(jobSummary({ kind: 'rebuild', status: 'failed', error: 'lock' }).lines, ['失敗しました: lock']);

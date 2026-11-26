@@ -16,7 +16,7 @@ const prepare = async () => {
   t.majsoul.game('g3', 1_800_020_000, [['主催', HOST_ID, 50000, 30000], ['い', 2, 35000, 0], ['ろ', 3, 20000, -30000]], [HOST_ID]);
   const created = await t.call('POST', '/api/rankings', { token: 'admin', body: { name: 'テスト' } });
   const id: string = created.body.id;
-  await t.call('PUT', `/api/rankings/${id}/accounts/${HOST_EID}`, { token: 'admin' });
+  await t.call('POST', `/api/rankings/${id}/accounts`, { token: 'admin', body: { displayId: String(HOST_EID) } });
   const base = `/api/rankings/${id}`;
   const job = async (res: { status: number; body: any }) => {
     assert.equal(res.status, 202, JSON.stringify(res.body));
@@ -46,9 +46,9 @@ test('候補の更新 → 候補 → 取り込み → ランキングの JSON', 
   const list = await t.call('GET', `${t.base}/games`, { token: 'admin' });
   assert.equal(list.status, 200);
   assert.deepEqual(list.body.games.map((g: any) => [g.uuid, g.mode, g.sources]), [
-    ['g3', '3p', [String(HOST_EID)]],
-    ['g2', '4p', [String(HOST_EID)]],
-    ['g1', '4p', [String(HOST_EID)]],
+    ['g3', '3p', [String(HOST_ID)]],
+    ['g2', '4p', [String(HOST_ID)]],
+    ['g1', '4p', [String(HOST_ID)]],
   ]);
   assert.equal(list.body.accounts[0].internalId, String(HOST_ID));
   assert.equal(list.body.accounts[0].name, '主催');
@@ -83,11 +83,10 @@ test('S3 に牌譜がある対局は、雀魂に要求せずに取り込む（�
   const logins = t.majsoul.logins;
 
   const other = (await t.call('POST', '/api/rankings', { token: 'admin', body: { name: '別' } })).body.id;
-  await t.call('PUT', `/api/rankings/${other}/accounts/${HOST_EID}`, { token: 'admin' });
-  // 別のランキングでも、最初は内部 ID を引くので候補の更新が要る
-  await t.job(await t.call('POST', `/api/rankings/${other}/refresh`, { token: 'admin' }));
+  // 内部 ID で指定すれば、内部 ID を引く要求は要らない。候補はアカウントごとに共有なので、更新しなくても出る
+  await t.call('PUT', `/api/rankings/${other}/accounts/${HOST_ID}`, { token: 'admin' });
   const before = t.majsoul.logins;
-  assert.equal(before, logins + 1);
+  assert.equal(before, logins);
   // 対局の状態はランキングごと。もう一方で取り込み済みでも、ここでは候補
   const res = await t.job(await t.call('POST', `/api/rankings/${other}/import`, { token: 'admin', body: { uuids: ['g1'] } }));
   assert.deepEqual(res.result.imported, ['g1']);
@@ -190,12 +189,20 @@ test('ログインに失敗したらジョブは失敗し、通知を結果に�
 
 test('表示用 ID が見つからないアカウントは、そのアカウントだけ失敗にする', async () => {
   const t = await prepare();
-  await t.call('PUT', `${t.base}/accounts/9999`, { token: 'admin' });
+  await t.call('POST', `${t.base}/accounts`, { token: 'admin', body: { displayId: '9999' } });
   const job = await t.job(await t.call('POST', `${t.base}/refresh`, { token: 'admin' }));
   assert.equal(job.status, 'done');
-  const byId = Object.fromEntries(job.result.accounts.map((a: any) => [a.displayId, a]));
-  assert.equal(byId[String(HOST_EID)].internalId, String(HOST_ID));
-  assert.match(byId['9999'].error, /見つからない/);
+  const ok = job.result.accounts.find((a: any) => !a.error);
+  const ng = job.result.accounts.find((a: any) => a.error);
+  assert.equal(ok.internalId, String(HOST_ID));
+  assert.match(ng.error, /見つからない/);
+  // 表示用 ID はジョブの結果に出さない
+  assert.ok(!JSON.stringify(job).includes('9999'));
+  // 見つからなかった仮の項目は残る（外せる）
+  const detail = (await t.call('GET', t.base, { token: 'admin' })).body;
+  assert.deepEqual(detail.accounts.map((a: any) => a.pendingId ?? a.internalId).sort(), [String(HOST_ID), ng.pendingId].sort());
+  const removed = await t.call('DELETE', `${t.base}/accounts/pending/${ng.pendingId}`, { token: 'admin' });
+  assert.deepEqual(removed.body.accounts.map((a: any) => a.internalId), [String(HOST_ID)]);
 });
 
 test('定期取得は、登録されたすべての雀魂アカウントの候補を更新する', async () => {
@@ -205,7 +212,7 @@ test('定期取得は、登録されたすべての雀魂アカウントの候�
   await t.h({ source: 'scheduler', action: 'refresh-candidates' });
   assert.deepEqual(await t.candidates(), ['g4', 'g3', 'g2', 'g1']);
   // 雀魂アカウントを外すと、定期取得の一覧からも外れる
-  await t.call('DELETE', `${t.base}/accounts/${HOST_EID}`, { token: 'admin' });
+  await t.call('DELETE', `${t.base}/accounts/${HOST_ID}`, { token: 'admin' });
   assert.deepEqual(await t.store.listMajsouls(), []);
 });
 
@@ -245,4 +252,59 @@ test('付いていない利用者には、対局・ジョブを 404 で返す。
   assert.equal(job.status, 'done');
   const log = (await t.call('GET', `${t.base}/logs`, { token: 'host' })).body.logs[0];
   assert.deepEqual([log.op, log.sub, log.via], ['import', 'sub-host', 'host']);
+});
+
+test('表示用 ID で指定すると、最初の候補の更新で内部 ID の項目に置き換わり、表示用 ID はどこにも残らない', async () => {
+  const t = await prepare();
+  const before = (await t.call('GET', t.base, { token: 'admin' })).body;
+  assert.equal(before.accounts.length, 1);
+  assert.ok(before.accounts[0].pendingId);
+  assert.equal(before.accounts[0].internalId, undefined);
+  // 同じ表示用 ID をもう一度指定しても、仮の項目は増えない
+  const again = await t.call('POST', `${t.base}/accounts`, { token: 'admin', body: { displayId: String(HOST_EID) } });
+  assert.equal(again.status, 200);
+  assert.equal(again.body.accounts.length, 1);
+
+  const job = await t.job(await t.call('POST', `${t.base}/refresh`, { token: 'admin' }));
+  assert.equal(job.status, 'done', job.error);
+  assert.equal(job.result.accounts[0].name, '主催');
+
+  const after = (await t.call('GET', t.base, { token: 'admin' })).body;
+  assert.deepEqual(after.accounts.map((a: any) => [a.internalId, a.pendingId, a.name]), [[String(HOST_ID), undefined, '主催']]);
+  const logs = (await t.call('GET', `${t.base}/logs`, { token: 'admin' })).body.logs;
+  const everything = JSON.stringify([...(t.store as any).items.values()]) + JSON.stringify(logs) + JSON.stringify(after);
+  assert.ok(!everything.includes(String(HOST_EID)), '表示用 ID が残っている');
+  // 次の更新では、表示用 ID からは引かない
+  t.majsoul.calls.length = 0;
+  await t.job(await t.call('POST', `${t.base}/refresh`, { token: 'admin' }));
+  assert.ok(!t.majsoul.calls.includes('Lobby.searchAccountByEid'));
+});
+
+test('ランキングの対局の参加者から選んで、内部 ID で指定できる（雀魂に要求しない）', async () => {
+  const t = await prepare();
+  await t.job(await t.call('POST', `${t.base}/refresh`, { token: 'admin' }));
+  await t.job(await t.call('POST', `${t.base}/import`, { token: 'admin', body: { uuids: ['g1'] } }));
+  const other = (await t.call('POST', '/api/rankings', { token: 'admin', body: { name: '別' } })).body.id;
+  // 対局の無いランキングでは参加者は空
+  assert.deepEqual((await t.call('GET', `/api/rankings/${other}/players`, { token: 'admin' })).body.players, []);
+
+  const players = (await t.call('GET', `${t.base}/players`, { token: 'admin' })).body.players;
+  // 対局の数の多い順。同数は内部 ID の順（g3 は三麻なので、は（4）は2局）
+  assert.deepEqual(players, [
+    { internalId: '2', name: 'い', games: 3 },
+    { internalId: '3', name: 'ろ', games: 3 },
+    { internalId: String(HOST_ID), name: '主催', games: 3 },
+    { internalId: '4', name: 'は', games: 2 },
+  ]);
+
+  const logins = t.majsoul.logins;
+  const added = await t.call('PUT', `${t.base}/accounts/2`, { token: 'admin' });
+  assert.equal(added.status, 201);
+  const { addedAt: _at, ...view } = added.body.accounts.find((a: any) => a.internalId === '2');
+  assert.deepEqual(view, { internalId: '2', name: 'い' });
+  assert.equal(t.majsoul.logins, logins);
+  // 定期取得の一覧にもすぐ入る
+  assert.deepEqual((await t.store.listMajsouls()).sort(), ['2', String(HOST_ID)].sort());
+  const log = (await t.call('GET', `${t.base}/logs`, { token: 'admin' })).body.logs[0];
+  assert.deepEqual([log.op, log.target, log.detail], ['addAccount', '2', { name: 'い' }]);
 });

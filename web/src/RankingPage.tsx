@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import {
   api,
   LoginRequired,
+  type AccountView,
   type GameListState,
   type GamesAccount,
   type GameState,
@@ -13,9 +14,10 @@ import {
   type Me,
   type MergedCandidate,
   type Operation,
+  type Player,
   type RankingDetail,
 } from './lib/api.ts';
-import { formatDateTime, formatPt, jobSummary, lengthLabel, logSummary, modeLabel, opLabel, publicUrl } from './lib/format.ts';
+import { accountLabel, formatDateTime, formatPt, jobSummary, lengthLabel, logSummary, modeLabel, opLabel, publicUrl } from './lib/format.ts';
 import { isFinished, waitJob } from './lib/job.ts';
 import { canOnRanking } from './lib/permissions.ts';
 
@@ -214,8 +216,8 @@ function AccountsStatus({ accounts }: { accounts: GamesAccount[] }) {
   return (
     <ul class="accounts">
       {accounts.map((a) => (
-        <li key={a.displayId}>
-          雀魂アカウント {a.name ? `${a.name}（ID ${a.displayId}）` : `ID ${a.displayId}`}:{' '}
+        <li key={a.internalId ?? a.pendingId}>
+          雀魂アカウント {accountLabel(a)}:{' '}
           {a.lastRefreshedAt ? `最後に更新 ${formatDateTime(a.lastRefreshedAt)}` : 'まだ更新していません'}
         </li>
       ))}
@@ -318,7 +320,11 @@ function CandidatesTab(s: Shared) {
                   <td class="nowrap">{formatDateTime(g.endTime)}</td>
                   <td class="nowrap">
                     {modeLabel(g.mode)} {lengthLabel(g.subTag)}
-                    {data && data.accounts.length > 1 && <div class="note">ID {g.sources.join('・')}</div>}
+                    {data && data.accounts.length > 1 && (
+                      <div class="note">
+                        {g.sources.map((id) => accountLabel(data.accounts.find((a) => a.internalId === id) ?? { internalId: id })).join('・')}
+                      </div>
+                    )}
                   </td>
                   <td>
                     <Players players={g.players.map((p) => ({ rank: p.rank, name: p.nickname }))} />
@@ -454,7 +460,24 @@ function SettingsTab(s: Shared) {
   const { ranking } = s;
   const [name, setName] = useState(ranking.name);
   const [displayId, setDisplayId] = useState('');
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [picked, setPicked] = useState('');
   const [busy, setBusy] = useState(false);
+  const specified = new Set(ranking.accounts.map((a) => a.internalId));
+  const choices = players.filter((p) => !specified.has(p.internalId));
+
+  // 雀魂アカウントを選ぶための、ランキングの対局の参加者
+  useEffect(() => {
+    if (!s.can('setAccounts')) return;
+    let alive = true;
+    api.listPlayers(ranking.id).then(
+      (r) => alive && setPlayers(r.players),
+      (e) => alive && s.fail(e),
+    );
+    return () => {
+      alive = false;
+    };
+  }, [ranking.id, s.version]);
   const url = publicUrl(location.origin, ranking.publicId);
 
   const run = async (fn: () => Promise<RankingDetail>, done: string) => {
@@ -497,22 +520,23 @@ function SettingsTab(s: Shared) {
       <div class="card">
         <h2>雀魂アカウント</h2>
         <p class="note">
-          ここに指定した雀魂アカウントの友人戦が、候補として出てきます。雀魂のプロフィールや友達追加の画面に出る数字の ID を入れてください。複数指定できます。
+          ここに指定した雀魂アカウントの友人戦が、候補として出てきます（ふつうは友人戦の部屋を立てる人）。複数指定できます。
         </p>
         {ranking.accounts.length === 0 ? (
           <p>まだ指定していません。</p>
         ) : (
           <ul class="accounts">
-            {ranking.accounts.map((a) => (
-              <li key={a.displayId}>
-                ID {a.displayId}
+            {ranking.accounts.map((a: AccountView) => (
+              <li key={a.internalId ?? a.pendingId}>
+                {accountLabel(a)}
                 {s.can('setAccounts') && (
                   <button
                     type="button"
                     disabled={busy}
                     onClick={() => {
-                      if (confirm(`雀魂アカウント ID ${a.displayId} を外しますか？（取り込み済みの対局はそのまま残ります）`)) {
-                        void run(() => api.removeAccount(ranking.id, a.displayId), `ID ${a.displayId} を外しました。`);
+                      const label = accountLabel(a);
+                      if (confirm(`雀魂アカウント「${label}」を外しますか？（取り込み済みの対局はそのまま残ります）`)) {
+                        void run(() => api.removeAccount(ranking.id, a), `「${label}」を外しました。`);
                       }
                     }}
                   >
@@ -524,28 +548,63 @@ function SettingsTab(s: Shared) {
           </ul>
         )}
         {s.can('setAccounts') && (
-          <form
-            class="inline"
-            onSubmit={async (e) => {
-              e.preventDefault();
-              const id = displayId.trim();
-              if (await run(() => api.addAccount(ranking.id, id), `ID ${id} を指定しました。「候補」のタブで候補を更新してください。`)) {
-                setDisplayId('');
-              }
-            }}
-          >
-            <input
-              value={displayId}
-              inputMode="numeric"
-              pattern="[0-9]{1,12}"
-              placeholder="例: 12345678"
-              aria-label="雀魂の ID"
-              onInput={(e) => setDisplayId((e.target as HTMLInputElement).value)}
-            />
-            <button type="submit" disabled={busy || !/^\d{1,12}$/.test(displayId.trim())}>
-              指定する
-            </button>
-          </form>
+          <>
+            <h3>対局の参加者から選ぶ</h3>
+            {choices.length === 0 ? (
+              <p class="note">このランキングの対局（取り込み済み・候補）に、まだ指定していない参加者がいません。</p>
+            ) : (
+              <form
+                class="inline"
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  const p = choices.find((c) => c.internalId === picked);
+                  if (!p) return;
+                  if (await run(() => api.addAccount(ranking.id, p.internalId), `「${p.name}」を指定しました。「候補」のタブで候補を更新してください。`)) {
+                    setPicked('');
+                  }
+                }}
+              >
+                <select value={picked} aria-label="参加者" onChange={(e) => setPicked((e.target as HTMLSelectElement).value)}>
+                  <option value="">選んでください</option>
+                  {choices.map((p) => (
+                    <option key={p.internalId} value={p.internalId}>
+                      {p.name}（{p.games}局）
+                    </option>
+                  ))}
+                </select>
+                <button type="submit" disabled={busy || picked === ''}>
+                  指定する
+                </button>
+              </form>
+            )}
+            <h3>雀魂の ID で指定する</h3>
+            <p class="note">
+              対局がまだ無いときは、雀魂のプロフィールや友達追加の画面に出る数字の ID で指定できます。ID は次の候補の更新でアカウントを確かめるためだけに使い、確かめたら消します。ほかの管理人・主催者の画面にも出しません。
+            </p>
+            <form
+              class="inline"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const id = displayId.trim();
+                if (await run(() => api.addAccountByDisplayId(ranking.id, id), '指定しました。「候補」のタブで候補を更新してください。')) {
+                  setDisplayId('');
+                }
+              }}
+            >
+              <input
+                value={displayId}
+                inputMode="numeric"
+                autocomplete="off"
+                pattern="[0-9]{1,12}"
+                placeholder="例: 12345678"
+                aria-label="雀魂の ID"
+                onInput={(e) => setDisplayId((e.target as HTMLInputElement).value)}
+              />
+              <button type="submit" disabled={busy || !/^\d{1,12}$/.test(displayId.trim())}>
+                指定する
+              </button>
+            </form>
+          </>
         )}
       </div>
 

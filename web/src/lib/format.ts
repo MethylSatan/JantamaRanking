@@ -42,6 +42,16 @@ const OP_LABELS: Record<string, string> = {
 
 export const opLabel = (op: string): string => OP_LABELS[op] ?? op;
 
+/**
+ * 雀魂アカウントの呼び方。名前（一覧に出ていたニックネーム）を優先する。
+ * 表示用 ID は API から来ない（タスク 031）。表示用 ID で指定して、まだ候補を更新していないものは名前も ID も無い
+ */
+export function accountLabel(a: { name?: unknown; internalId?: unknown }): string {
+  if (typeof a.name === 'string' && a.name !== '') return a.name;
+  if (a.internalId !== undefined) return `ID ${String(a.internalId)}`;
+  return '表示用 ID で指定したアカウント（次の候補の更新で確かめます）';
+}
+
 const STATE_LABELS: Record<string, string> = { candidate: '候補', imported: '取り込み済み', excluded: '対象外' };
 
 /** 操作ログの内容を1行に */
@@ -54,7 +64,8 @@ export function logSummary(entry: LogEntry): string {
       return `「${String(d.name)}」`;
     case 'addAccount':
     case 'removeAccount':
-      return `ID ${entry.target ?? ''}`;
+      if (d.byDisplayId === true) return '表示用 ID で指定';
+      return accountLabel({ name: d.name, internalId: entry.target });
     case 'exclude':
       return `${STATE_LABELS[String(d.from)] ?? String(d.from)}から`;
     case 'restore':
@@ -79,8 +90,8 @@ export function jobSummary(job: Pick<Job, 'kind' | 'result' | 'status' | 'error'
   for (const n of arr(result.notices)) warnings.push(`お知らせ: ${String(n)}`);
   if (job.kind === 'refresh') {
     for (const a of arr(result.accounts) as Record<string, unknown>[]) {
-      if (a.error !== undefined) warnings.push(`雀魂アカウント ${String(a.displayId ?? a.internalId)}: 取得できませんでした（${String(a.error)}）`);
-      for (const w of arr(a.warnings)) warnings.push(`雀魂アカウント ${String(a.displayId ?? a.internalId)}: ${String(w)}`);
+      if (a.error !== undefined) warnings.push(`雀魂アカウント ${accountLabel(a)}: 取得できませんでした（${String(a.error)}）`);
+      for (const w of arr(a.warnings)) warnings.push(`雀魂アカウント ${accountLabel(a)}: ${String(w)}`);
     }
   }
   const lines = job.status === 'failed' ? [`失敗しました: ${job.error ?? ''}`] : jobLines(job);
@@ -95,7 +106,7 @@ function jobLines(job: Pick<Job, 'kind' | 'result'>): string[] {
         .filter((a) => a.error === undefined)
         .map((a) => {
           const ret = (a.returned ?? {}) as Record<string, number>;
-          return `ID ${String(a.displayId ?? a.internalId)}: 四麻${ret['4p'] ?? 0}件・三麻${ret['3p'] ?? 0}件、新しい候補${Number(a.newCandidates ?? 0)}件`;
+          return `${accountLabel(a)}: 四麻${ret['4p'] ?? 0}件・三麻${ret['3p'] ?? 0}件、新しい候補${Number(a.newCandidates ?? 0)}件`;
         });
     case 'import': {
       const lines = [`${arr(r.imported).length}件を取り込みました`];

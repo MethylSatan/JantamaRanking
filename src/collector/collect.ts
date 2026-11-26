@@ -62,7 +62,8 @@ export async function listCandidates(session: Session, host: Host, isKnown: (uui
   } else {
     const found = await session.call('Lobby.searchAccountByEid', { eid: host.eid });
     accountId = found.account_id;
-    if (!accountId) throw new Error(`表示用 ID ${host.eid} のアカウントが見つからない`);
+    // 表示用 ID は、呼び出し側でジョブの結果などに残るので、文には入れない（タスク 031）
+    if (!accountId) throw new Error('表示用 ID のアカウントが見つからない');
   }
 
   const candidates: Candidate[] = [];
