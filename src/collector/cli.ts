@@ -4,12 +4,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fromRecordGame, type RecordGameHead } from '../ranking/index.ts';
 import { fetchHeads, gameLength, listCandidates, type Candidate, type Host } from './collect.ts';
-import type { Credentials } from './login.ts';
-import { loadState, openSession, refreshState, type CollectorDeps, type StateKey } from './session.ts';
+import { DEFAULT_COLLECTOR_DIR, localCollectorDeps, readJsonFile, writeJsonFile } from './local.ts';
+import { loadState, openSession, refreshState } from './session.ts';
 
-const DIR = path.resolve(process.env.COLLECTOR_DIR ?? path.join(import.meta.dirname, '../../local/collector'));
+const DIR = DEFAULT_COLLECTOR_DIR;
 const file = (name: string) => path.join(DIR, name);
-const STATE_FILES: Record<StateKey, string> = { 'client-version': 'client-version.json', liqi: 'liqi.json' };
 
 const USAGE = `使い方: node src/collector/cli.ts <コマンド>
   update-static            雀魂のバージョンと定義を作り直す（ログインしない）
@@ -24,38 +23,9 @@ interface Records {
   excluded: Record<string, string>;
 }
 
-function readJson<T>(name: string, fallback: T): T {
-  try {
-    return JSON.parse(fs.readFileSync(file(name), 'utf8')) as T;
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === 'ENOENT') return fallback;
-    throw e;
-  }
-}
-function writeJson(name: string, value: unknown, mode = 0o600) {
-  fs.mkdirSync(path.dirname(file(name)), { recursive: true });
-  fs.writeFileSync(file(name), JSON.stringify(value, null, 2) + '\n', { mode });
-}
-
-function deps(): CollectorDeps {
-  return {
-    store: {
-      get: async (key) => (fs.existsSync(file(STATE_FILES[key])) ? fs.readFileSync(file(STATE_FILES[key]), 'utf8') : null),
-      put: async (key, value) => writeJson(STATE_FILES[key], JSON.parse(value)),
-    },
-    credentials: async () => {
-      const s = readJson<Partial<Credentials> | null>('secret.json', null);
-      if (!s?.code || !s.uid || !s.type) throw new Error(`${file('secret.json')} に type / code / uid がない（docs/collector.md）`);
-      return { type: s.type, code: s.code, uid: s.uid };
-    },
-    luaKey: async () => {
-      if (!fs.existsSync(file('lua-key.txt'))) throw new Error(`${file('lua-key.txt')} がない（docs/collector.md）`);
-      return Buffer.from(fs.readFileSync(file('lua-key.txt'), 'latin1').trim(), 'latin1');
-    },
-    notify: (msg) => console.error(`[通知] ${msg}`),
-    log: (msg) => console.error(`${new Date().toTimeString().slice(0, 8)} ${msg}`),
-  };
-}
+const readJson = <T>(name: string, fallback: T): T => readJsonFile(file(name), fallback);
+const writeJson = (name: string, value: unknown) => writeJsonFile(file(name), value);
+const deps = () => localCollectorDeps(DIR);
 
 /** 同時に実行しない */
 function withLock<T>(fn: () => Promise<T>): Promise<T> {

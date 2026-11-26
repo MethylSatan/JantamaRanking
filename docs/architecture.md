@@ -11,6 +11,7 @@
 | token.js | `misc/token.js` | WebSocket メッセージ（hex）からアクセストークンを取り出す補助 |
 | 牌譜回収 | `src/collector/` | システム用の雀魂アカウントで、主催者の友人戦一覧（`fetchAccountInfoExtra`）と中身（`fetchGameRecordsDetail`）を取る。Web サービスの Lambda から呼ぶ部品と、手元で試す CLI。下の「牌譜回収（タスク 006）」 |
 | Web サービス | `infra/`（Terraform）、`src/api/`（Lambda）、`web/`（画面）、`.github/workflows/deploy.yml` | 基盤はタスク 010 で構築済み（`docs/deploy.md`）。画面と API の中身はタスク 013（024〜028 に分割）。下の「Web サービスの構成」 |
+| 旧方式の牌譜の移行 | `src/migrate/legacy.ts` | 旧方式の牌譜の `ref` で雀魂から head を取り直し、本番のランキングに入れる一度きりのスクリプト（タスク 015）。下の「旧方式の牌譜の移行（タスク 015）」 |
 | 集計 | `src/ranking/` | 牌譜 json から対局の結果を取り出し、ランキングを作る。依存のない TypeScript の関数。Lambda と画面の両方で使う。下の「集計（Web サービス）」 |
 | Drive / GAS / スプレッドシート | リポジトリ外（GAS の写しは `gas/`） | 旧方式の牌譜の置き場、投入スクリプト、集計。**Web サービスに置き換えてやめる**（2026-11-19）。シートの構成と集計のルールは下の「旧集計（スプレッドシート）」 |
 
@@ -296,6 +297,14 @@ DynamoDB のテーブルは `pk`/`sk` のまま、GSI は足さない。件数�
 - 2本目の接続（`jpgsbk`）は張らない。張らなくても一覧と牌譜は取れる（タスク 011・006）
 - Lambda（`nodejs24.x`）へは、esbuild で1ファイルの ESM にまとめて載せる（`npm run build:api`。タスク 010）。`ws` などは CommonJS で Node の組み込みを `require` するので、banner で `createRequire` を入れる（入れないと読み込みで `Dynamic require of "events" is not supported` になる。`node -e` で読むと `require` があるので気づかない）
 - Web サービスでの組み込み（タスク 025）: `src/api/aws.ts` が `CollectorDeps` を作る（`store` は S3 の `state/`、認証情報と鍵は SSM）。`listCandidates` の戻り値の `all`（処理済みを含む全件）を候補の対局として保存する
+
+## 旧方式の牌譜の移行（タスク 015）
+旧方式（Drive のアーカイブ）の牌譜は、本番のランキング「ちのリーグ」に「取り込み済み」で入っている。決定の理由は `docs/decisions.md` 2026-11-27（タスク 015）。具体は `docs/local/015-migration-notes.md`。
+
+- `src/migrate/legacy.ts`: `fetch`（旧方式の牌譜の `ref` で head を取り直す。ログイン1回）→ `compare`（旧方式の牌譜と突き合わせる）→ `upload`（S3 の `records/` に置き、DynamoDB に状態を書き、ランキングの JSON を作り直す。操作ログの op は `importLegacy`）。入出力は `local/legacy/`
+- 入れた後の牌譜は新方式と同じ形なので、作り直し・対象外は新方式の対局と同じに扱える
+- 旧方式で牌譜を手で作った対局（uuid がすべて0）は、雀魂に無いので、旧方式の牌譜とほかの対局の名前と ID の対応から head を作った。head の `legacyManual` が印
+- CLI と移行のスクリプトは、手元の雀魂の接続の依存（`src/collector/local.ts`）を共有する
 
 ## 旧集計（スプレッドシート。タスク 003 で記録）
 Web サービスに移す集計のルール（タスク 012）。シートの場所と、データの具体（件数・期間）は `docs/local/003-sheet-notes.md`。

@@ -92,6 +92,15 @@ test(`1回に取れるのは${MAX_RECORDS_PER_RUN}件まで`, async () => {
   await assert.rejects(fetchHeads(session, ['u'], { chunkSize: 0 }), /chunkSize/);
 });
 
+test('maxRecords で上限を変えられる', async () => {
+  const { session, calls } = fakeSession(() => ({}));
+  const uuids = Array.from({ length: MAX_RECORDS_PER_RUN + 1 }, (_, i) => `u${i}`);
+  const r = await fetchHeads(session, uuids, { maxRecords: MAX_RECORDS_PER_RUN + 1 });
+  assert.equal(r.missing.length, MAX_RECORDS_PER_RUN + 1);
+  assert.equal(calls.length, 3);
+  await assert.rejects(fetchHeads(session, ['u1', 'u2'], { maxRecords: 1 }), /1件まで/);
+});
+
 test('trimHead は元の head を変えない', () => {
   const h = head('u');
   const t = trimHead(h);

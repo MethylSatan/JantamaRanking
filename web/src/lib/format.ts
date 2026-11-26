@@ -37,6 +37,7 @@ const OP_LABELS: Record<string, string> = {
   exclude: '対象外にする',
   restore: '戻す',
   regeneratePublicId: '公開 URL を取り直し',
+  importLegacy: '旧方式の牌譜を取り込み',
 };
 
 export const opLabel = (op: string): string => OP_LABELS[op] ?? op;
@@ -58,6 +59,8 @@ export function logSummary(entry: LogEntry): string {
       return `${STATE_LABELS[String(d.from)] ?? String(d.from)}から`;
     case 'restore':
       return `${STATE_LABELS[String(d.to)] ?? String(d.to)}へ`;
+    case 'importLegacy':
+      return `${Number(d.imported)}件（取り込み済みだった${Number(d.skipped)}件は変えていない）`;
     case 'refresh':
     case 'import':
     case 'rebuild':

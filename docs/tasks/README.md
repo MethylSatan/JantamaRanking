@@ -19,7 +19,7 @@
 | [012](012-ranking-rules.md) | 集計ルールの移植 | 003 | done |
 | [013](013-web-ui.md) | Web サービスの画面と API（024〜028 に分割した親タスク） | 024〜028 | done |
 | [014](014-x-login.md) | X ログインの調査（主催者への開放。Discord に決定） | - | done |
-| [015](015-legacy-data-migration.md) | 旧方式の牌譜（Drive）の移行 | 012、013 | todo |
+| [015](015-legacy-data-migration.md) | 旧方式の牌譜（Drive）の移行 | 012、013 | done |
 | [016](016-client-version-tracking.md) | 雀魂のバージョンへの追従 | 011 | done |
 | [017](017-liqi-definition-tracking.md) | liqi の定義への追従 | 016 | done |
 | [018](018-new-host-history.md) | 新しい主催者の過去分の取り込み（優先度は最低） | 006 | todo |
@@ -34,6 +34,7 @@
 | [027](027-viewer-ui.md) | 閲覧者の画面 | 025、026 | done |
 | [028](028-enable-daily-refresh.md) | 定期取得の有効化（有効にしないと決定） | 025 | done |
 | [029](029-first-refresh-interval.md) | 初めての候補の更新が続けて受け付けられる（画面の二重押しだけ対応） | 025 | done |
+| [030](030-chino-league-account.md) | ちのリーグに主催者の雀魂アカウントを指定し、新方式との間の欠けを確かめる | 015 | todo |
 
 ## 新しいタスクの作り方
 - ファイル名は `NNN-短い名前.md`（連番）。この表にも行を足す

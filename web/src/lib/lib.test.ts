@@ -80,6 +80,10 @@ test('処理の結果の要約', () => {
     '1件を取り込みました',
   );
   assert.equal(logSummary({ at: '', sub: 's', via: 'admin', op: 'refresh', detail: { error: 'x' } }), '失敗: x');
+  assert.equal(
+    logSummary({ at: '', sub: 's', via: 'admin', op: 'importLegacy', detail: { imported: 950, skipped: 3 } }),
+    '950件（取り込み済みだった3件は変えていない）',
+  );
 });
 
 test('処理が終わるまで見る', async () => {

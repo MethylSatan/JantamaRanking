@@ -126,10 +126,18 @@ export interface FetchResult {
   missing: string[];
 }
 
-/** 選んだ対局の牌譜（head）を取る。`chunkSize` 件ずつまとめて要求する。上限は MAX_RECORDS_PER_RUN 件 */
-export async function fetchHeads(session: Session, uuids: string[], opts: { chunkSize?: number } = {}): Promise<FetchResult> {
+/**
+ * 選んだ対局の牌譜（head）を取る。`chunkSize` 件ずつまとめて要求する。
+ * 上限は既定で MAX_RECORDS_PER_RUN 件。`maxRecords` で変えられる（旧方式の牌譜の移行など、1回だけの作業に使う）
+ */
+export async function fetchHeads(
+  session: Session,
+  uuids: string[],
+  opts: { chunkSize?: number; maxRecords?: number } = {},
+): Promise<FetchResult> {
   const unique = [...new Set(uuids)];
-  if (unique.length > MAX_RECORDS_PER_RUN) throw new Error(`1回に取れるのは${MAX_RECORDS_PER_RUN}件まで（${unique.length}件を指定した）`);
+  const max = opts.maxRecords ?? MAX_RECORDS_PER_RUN;
+  if (unique.length > max) throw new Error(`1回に取れるのは${max}件まで（${unique.length}件を指定した）`);
   const chunkSize = opts.chunkSize ?? DEFAULT_CHUNK_SIZE;
   if (!(chunkSize >= 1)) throw new Error(`chunkSize が不正: ${chunkSize}`);
   const byUuid = new Map<string, Record<string, unknown>>();

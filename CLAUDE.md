@@ -20,6 +20,7 @@ Vtuber の東風乃ちのさんのメン限友人戦向けに作ったもの。2
 - `npm run build:api`: Lambda 用に `src/api/handler.ts` を `dist/api/index.mjs` にまとめる（esbuild）
 - `npm run apicheck -- smoke`: 本番の API を Admin のトークンで確かめる（`login` / `smoke` / `call`。`docs/deploy.md`「確認」）
 - `node src/collector/cli.ts <コマンド>`: 牌譜回収を手元で試す（`candidates` / `fetch` / `exclude` / `update-static`）。状態は `local/collector/`。手順は `docs/collector.md`
+- `node src/migrate/legacy.ts <fetch|compare|upload>`: 旧方式の牌譜の移行（タスク 015 で実施済み。一度きり）。入出力は `local/legacy/`
 
 `PaifuImporter/` で実行する（Node.js。バージョンは未確認、タスク001で確認する）。
 - `npm install`: 依存を入れる
