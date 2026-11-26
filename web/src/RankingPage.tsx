@@ -54,6 +54,9 @@ export function RankingPage({ id, me, onLoginRequired }: { id: string; me: Me; o
   const [message, setMessage] = useState('');
   const [job, setJob] = useState<Job | null>(null);
   const [version, setVersion] = useState(0);
+  // 処理を始めてから終わるまで。API が返る前（job がまだ null）の二重押しも防ぐ
+  const [starting, setStarting] = useState(false);
+  const startingRef = useRef(false);
   const abort = useRef(new AbortController());
 
   const fail = (e: unknown) => {
@@ -85,7 +88,7 @@ export function RankingPage({ id, me, onLoginRequired }: { id: string; me: Me; o
     );
   }
 
-  const jobRunning = job !== null && !isFinished(job);
+  const jobRunning = starting || (job !== null && !isFinished(job));
   const shared: Shared = {
     ranking,
     me,
@@ -97,6 +100,10 @@ export function RankingPage({ id, me, onLoginRequired }: { id: string; me: Me; o
     fail,
     notify,
     runJob: async (start) => {
+      // 同じ描画の間の連打は state では止められないので ref で弾く
+      if (startingRef.current) return;
+      startingRef.current = true;
+      setStarting(true);
       setError('');
       setMessage('');
       try {
@@ -105,6 +112,8 @@ export function RankingPage({ id, me, onLoginRequired }: { id: string; me: Me; o
       } catch (e) {
         fail(e);
       } finally {
+        startingRef.current = false;
+        setStarting(false);
         setVersion((v) => v + 1);
       }
     },
