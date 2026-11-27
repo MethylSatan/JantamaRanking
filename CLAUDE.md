@@ -37,13 +37,12 @@ Tampermonkey スクリプトは `Tampermonkey/` にある。ブラウザの拡�
 | 文書 | 内容 |
 |---|---|
 | `docs/product.md` | 何を作るか。目的、機能・非機能要件、スコープ外、未決事項 |
-| `docs/architecture.md` | どう作るか。構成要素、データの流れ、リポジトリ構成、牌譜 json |
+| `docs/architecture.md` | どう作るか。全体像の図（Mermaid）、構成要素、データの流れ、リポジトリ構成、牌譜 json |
 | `docs/collector.md` | 牌譜回収の CLI の使い方 |
 | `docs/deploy.md` | AWS の構成（`infra/`）、デプロイ、費用、OAC の注意 |
 | `docs/decisions.md` | 決定ログ（追記のみ） |
 | `docs/tasks/README.md` | タスク一覧と状態。セッション開始時の入口 |
 | `docs/tasks/NNN-*.md` | タスクごとの詳細 |
-| `architecture.png` | 全体像の図（取得→Drive→GAS→スプレッドシート） |
 | `docs/local/` | ローカル限定のメモ（gitignore 済み。別の環境には無いことがある）。入口は `docs/local/README.md` |
 
 ## セッションの進め方

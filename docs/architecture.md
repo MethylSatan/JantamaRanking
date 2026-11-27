@@ -1,6 +1,34 @@
 # アーキテクチャ
 
-全体像の図は `architecture.png`（①牌譜を開く → ②牌譜ファイル取得 → ③Drive へアップロード → ④スクリプト実行 → ⑤牌譜データ取得 → ⑥スプレッドシートへ投入）。
+## 全体像
+Web サービスの構成（詳しくは下の「Web サービスの構成」）。図は Mermaid で書き、GitHub で描画される。旧方式の図（`architecture.png`）はタスク 034 で消した（git の履歴に残る）。
+
+```mermaid
+flowchart LR
+  host["Admin・Host<br>管理の画面 admin.html"]
+  viewer["Viewer<br>閲覧の画面 ranking.html"]
+  discord["Discord"]
+  cognito["Cognito<br>Hosted UI"]
+  cf["CloudFront + WAF<br>jantama-ranking.methylsatan.com"]
+  site[("S3 site<br>画面・ランキングの JSON")]
+  lambda["Lambda<br>API とジョブ"]
+  ddb[("DynamoDB<br>ランキング・候補・対局の結果・操作ログ")]
+  records[("S3 records<br>牌譜の json")]
+  ssm[("SSM<br>システム用の雀魂アカウントの認証情報")]
+  majsoul["雀魂"]
+
+  host -- "ログイン" --> cognito
+  cognito -- "OIDC" --> discord
+  host -- "/api/* と JWT" --> cf
+  viewer -- "/rankings/*.json" --> cf
+  cf -- "/*" --> site
+  cf -- "/api/* を OAC で" --> lambda
+  lambda -- "友人戦の一覧と牌譜" --> majsoul
+  lambda --> ddb
+  lambda --> records
+  lambda -- "読む" --> ssm
+  lambda -- "ランキングの JSON を書く" --> site
+```
 
 ## 構成要素
 | 要素 | 場所 | 役割 |
