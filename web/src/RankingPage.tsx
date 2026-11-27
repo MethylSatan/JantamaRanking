@@ -16,6 +16,8 @@ import {
   type Operation,
   type Player,
   type RankingDetail,
+  type HostView,
+  type UserRow,
 } from './lib/api.ts';
 import { accountLabel, formatDateTime, formatPt, jobSummary, lengthLabel, logSummary, modeLabel, opLabel, publicUrl } from './lib/format.ts';
 import { isFinished, waitJob } from './lib/job.ts';
@@ -608,6 +610,8 @@ function SettingsTab(s: Shared) {
         )}
       </div>
 
+      {s.can('manageHosts') && <HostsCard {...s} />}
+
       {s.can('publicUrl') && (
         <div class="card">
           <h2>公開 URL</h2>
@@ -673,6 +677,107 @@ function SettingsTab(s: Shared) {
             削除する
           </button>
         </div>
+      )}
+    </div>
+  );
+}
+
+/** 主催者（Host）の付け外し。管理人だけ（タスク 023）。付けられるのは「利用者」で承認した人 */
+function HostsCard(s: Shared) {
+  const { ranking } = s;
+  const [hosts, setHosts] = useState<HostView[] | null>(null);
+  const [users, setUsers] = useState<UserRow[]>([]);
+  const [picked, setPicked] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    Promise.all([api.listHosts(ranking.id), api.listUsers()]).then(
+      ([h, u]) => {
+        if (!alive) return;
+        setHosts(h.hosts);
+        setUsers(u.users);
+      },
+      (e) => alive && s.fail(e),
+    );
+    return () => {
+      alive = false;
+    };
+  }, [ranking.id]);
+
+  const current = new Set(hosts?.map((h) => h.sub));
+  const choices = users.filter((u) => !u.admin && u.status === 'approved' && !current.has(u.sub));
+  const hostLabel = (h: HostView) => h.name ?? `Discord ID ${h.discordId ?? '不明'}`;
+
+  const run = async (fn: () => Promise<{ hosts: HostView[] }>, done: string) => {
+    s.notify('');
+    setBusy(true);
+    try {
+      setHosts((await fn()).hosts);
+      s.notify(done);
+      return true;
+    } catch (e) {
+      s.fail(e);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div class="card">
+      <h2>主催者</h2>
+      <p class="note">主催者は、このランキングの候補の更新・取り込み・雀魂アカウントの指定などができます（作成・削除・主催者の付け外しはできません）。</p>
+      {hosts === null ? (
+        <p>読み込んでいます…</p>
+      ) : hosts.length === 0 ? (
+        <p>まだいません（管理人だけで操作しています）。</p>
+      ) : (
+        <ul class="hosts">
+          {hosts.map((h) => (
+            <li key={h.sub}>
+              {hostLabel(h)}{' '}
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  if (confirm(`「${hostLabel(h)}」をこのランキングの主催者から外しますか？`)) {
+                    void run(() => api.removeHost(ranking.id, h.sub), `「${hostLabel(h)}」を外しました。`);
+                  }
+                }}
+              >
+                外す
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {choices.length === 0 ? (
+        <p class="note">
+          付けられる人がいません。主催者にしたい人に、管理の画面に Discord でログインして申請してもらい、<a href="#/users">利用者</a>で承認してください。
+        </p>
+      ) : (
+        <form
+          class="inline"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            const u = choices.find((c) => c.sub === picked);
+            if (!u) return;
+            if (await run(() => api.addHost(ranking.id, u.sub), `「${u.name ?? ''}」を主催者に付けました。`)) setPicked('');
+          }}
+        >
+          <select value={picked} aria-label="承認済みの利用者" onChange={(e) => setPicked((e.target as HTMLSelectElement).value)}>
+            <option value="">選んでください</option>
+            {choices.map((u) => (
+              <option key={u.sub} value={u.sub}>
+                {u.name}（Discord ID {u.discordId ?? '不明'}）
+              </option>
+            ))}
+          </select>
+          <button type="submit" disabled={busy || picked === ''}>
+            主催者に付ける
+          </button>
+        </form>
       )}
     </div>
   );

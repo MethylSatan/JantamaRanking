@@ -25,6 +25,9 @@ export function lengthLabel(subTag: number): string {
 /** pt を「+12.3」の形に */
 export const formatPt = (pt: number): string => (pt > 0 ? '+' : '') + pt.toFixed(1);
 
+/** 雀魂アカウントがこの数以上のランキングに、管理人の一覧で印を出す（API の ACCOUNT_ALERT_COUNT と同じ） */
+export const ACCOUNT_ALERT_COUNT = 32;
+
 const OP_LABELS: Record<string, string> = {
   createRanking: 'ランキングを作成',
   rename: '名前を変更',
@@ -38,6 +41,8 @@ const OP_LABELS: Record<string, string> = {
   restore: '戻す',
   regeneratePublicId: '公開 URL を取り直し',
   importLegacy: '旧方式の牌譜を取り込み',
+  addHost: '主催者を付ける',
+  removeHost: '主催者を外す',
 };
 
 export const opLabel = (op: string): string => OP_LABELS[op] ?? op;

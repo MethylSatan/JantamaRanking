@@ -1,11 +1,12 @@
 // ランキングの一覧と作成。
 
 import { useEffect, useState } from 'preact/hooks';
-import { api, LoginRequired, type Me, type RankingSummary } from './lib/api.ts';
+import { api, LoginRequired, type Me, type RankingListItem } from './lib/api.ts';
+import { ACCOUNT_ALERT_COUNT } from './lib/format.ts';
 import { canGlobal } from './lib/permissions.ts';
 
 export function RankingList({ me, onLoginRequired }: { me: Me; onLoginRequired: () => void }) {
-  const [rankings, setRankings] = useState<RankingSummary[] | null>(null);
+  const [rankings, setRankings] = useState<RankingListItem[] | null>(null);
   const [error, setError] = useState('');
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
@@ -39,6 +40,11 @@ export function RankingList({ me, onLoginRequired }: { me: Me; onLoginRequired: 
   return (
     <section>
       <h1>ランキング</h1>
+      {canGlobal(me, 'manageUsers') && (
+        <p>
+          <a href="#/users">利用者（申請の承認・却下）</a>
+        </p>
+      )}
       {error && <p class="error">{error}</p>}
       {rankings === null && !error && <p>読み込んでいます…</p>}
       {rankings !== null && rankings.length === 0 && (
@@ -49,6 +55,14 @@ export function RankingList({ me, onLoginRequired }: { me: Me; onLoginRequired: 
           {visible.map((r) => (
             <li key={r.id}>
               <a href={`#/r/${r.id}`}>{r.name}</a>
+              {r.accountCount !== undefined && r.accountCount >= ACCOUNT_ALERT_COUNT && (
+                <>
+                  {' '}
+                  <span class="badge" title="雀魂への要求が多くなります。必要なアカウントか確かめてください。">
+                    雀魂アカウント {r.accountCount}件
+                  </span>
+                </>
+              )}
             </li>
           ))}
         </ul>

@@ -114,7 +114,8 @@ button.link {
   text-decoration: underline;
 }
 
-input:not([type='checkbox']) {
+input:not([type='checkbox']),
+textarea {
   font: inherit;
   padding: 0.35rem 0.5rem;
   border: 1px solid var(--border);
@@ -428,4 +429,33 @@ th button.sort .arrow {
   table.ranking td.name {
     min-width: 4rem;
   }
+}
+
+/* 利用者（タスク 023） */
+textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.users {
+  list-style: none;
+  padding: 0;
+}
+
+.users .card p {
+  margin: 0.25rem 0;
+}
+
+.pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.hosts {
+  padding-left: 1.25rem;
+}
+
+.hosts li {
+  margin: 0.25rem 0;
 }

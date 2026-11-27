@@ -12,11 +12,44 @@ export type Role = 'admin' | 'host';
 export type Permissions = typeof PERMISSIONS;
 export type Operation = keyof Permissions;
 
+/** 本人の申請（タスク 023）。申請していなければ無い */
+export interface MyProfile {
+  name: string;
+  note: string;
+  status: 'pending' | 'approved';
+  appliedAt: string;
+}
+
 export interface Me {
   sub: string;
   admin: boolean;
   permissions: Record<Operation, { scope: 'global' | 'ranking'; roles: readonly Role[] }>;
+  profile?: MyProfile;
 }
+
+/** 管理人が見る利用者（Cognito の利用者に、申請の内容を合わせたもの） */
+export interface UserRow {
+  sub: string;
+  discordId: string | null;
+  createdAt: string;
+  admin: boolean;
+  name?: string;
+  note?: string;
+  status?: 'pending' | 'approved';
+  appliedAt?: string;
+  rankingIds: string[];
+}
+
+/** ランキングの主催者（Host） */
+export interface HostView {
+  sub: string;
+  name?: string;
+  discordId?: string;
+  addedAt: string;
+}
+
+/** 管理人の一覧では、雀魂アカウントの数が付く */
+export type RankingListItem = RankingSummary & { accountCount?: number };
 
 /** ランキングの雀魂アカウント。内部 ID か、表示用 ID で指定してまだ確かめていない仮の項目（pendingId）。表示用 ID は来ない */
 export interface AccountView {
@@ -71,6 +104,9 @@ export function errorMessage(status: number, detail: string): string {
     case 400:
       if (detail === 'no accounts') return '雀魂アカウントが指定されていません。設定で指定してください。';
       if (detail.startsWith('name')) return '名前は1〜100文字で入れてください。';
+      if (detail.startsWith('note')) return 'ひとことは500文字までにしてください。';
+      if (detail === 'user is not approved') return '承認していない人は、主催者に付けられません。先に「利用者」で承認してください。';
+      if (detail === 'cannot delete admin' || detail === 'admin cannot delete self') return '管理人は、この画面からは消せません。';
       if (detail === 'invalid account id') return '雀魂の ID は数字で入れてください。';
       if (detail.startsWith('not candidates')) return '候補にない対局が含まれています。一覧を読み直してください。';
       if (detail.startsWith('at most')) return '一度に取り込めるのは100件までです。';
@@ -132,7 +168,15 @@ const r = (id: string) => `/api/rankings/${encodeURIComponent(id)}`;
 
 export const api = {
   me: () => call<Me>('GET', '/api/me'),
-  listRankings: () => call<{ rankings: RankingSummary[] }>('GET', '/api/rankings'),
+  listRankings: () => call<{ rankings: RankingListItem[] }>('GET', '/api/rankings'),
+  putMyProfile: (name: string, note: string) => call<{ profile: MyProfile }>('PUT', '/api/me/profile', { name, note }),
+  deleteMe: () => call<{ deleted: true }>('DELETE', '/api/me'),
+  listUsers: () => call<{ users: UserRow[] }>('GET', '/api/users'),
+  approveUser: (sub: string) => call<{ approved: true }>('POST', `/api/users/${encodeURIComponent(sub)}/approve`),
+  deleteUser: (sub: string) => call<{ deleted: true }>('DELETE', `/api/users/${encodeURIComponent(sub)}`),
+  listHosts: (id: string) => call<{ hosts: HostView[] }>('GET', `${r(id)}/hosts`),
+  addHost: (id: string, sub: string) => call<{ hosts: HostView[] }>('PUT', `${r(id)}/hosts/${encodeURIComponent(sub)}`),
+  removeHost: (id: string, sub: string) => call<{ hosts: HostView[] }>('DELETE', `${r(id)}/hosts/${encodeURIComponent(sub)}`),
   createRanking: (name: string) => call<RankingDetail>('POST', '/api/rankings', { name }),
   getRanking: (id: string) => call<RankingDetail>('GET', r(id)),
   renameRanking: (id: string, name: string) => call<RankingDetail>('PATCH', r(id), { name }),
