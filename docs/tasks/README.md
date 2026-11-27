@@ -37,7 +37,7 @@
 | [030](030-chino-league-account.md) | ちのリーグに主催者の雀魂アカウントを指定し、新方式との間の欠けを確かめる | 015、031 | done |
 | [031](031-account-without-display-id.md) | 雀魂アカウントを表示用 ID なしで指定できるようにする | 024、026 | done |
 | [032](032-missed-games-warning.md) | 取りこぼしの警告を、主催者がリーグ以外の友人戦も打つ前提に直す | 025 | done |
-| [033](033-first-refresh-interval-again.md) | 初めての候補の更新の間隔を見直す（023 から分けた） | 023 | todo |
+| [033](033-first-refresh-interval-again.md) | 初めての候補の更新の間隔を見直す（023 から分けた） | 023 | done |
 
 ## 新しいタスクの作り方
 - ファイル名は `NNN-短い名前.md`（連番）。この表にも行を足す

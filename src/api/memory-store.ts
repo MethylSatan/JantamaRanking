@@ -190,6 +190,15 @@ export class MemoryStore implements Store {
     return true;
   }
 
+  async reservePendingRefresh(rankingId: string, pendingId: string, now: Date, minIntervalMs: number) {
+    const item = this.get(keys.pendingAccount(rankingId, pendingId));
+    if (!item) return true;
+    const cutoff = new Date(now.getTime() - minIntervalMs).toISOString();
+    if (item.lastRequestedAt !== undefined && item.lastRequestedAt > cutoff) return false;
+    item.lastRequestedAt = now.toISOString();
+    return true;
+  }
+
   async markRefreshed(internalId: string, at: string, name?: string) {
     const k = keys.majsoul(internalId);
     const item = this.get(k) ?? {};

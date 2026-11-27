@@ -322,12 +322,14 @@ const refresh: Handler = async (ctx, [id]) => {
   const { via, ranking } = await authorize(ctx.user, 'refresh', id!, ctx.deps.store);
   const accounts = await ctx.deps.store.listAccounts(ranking.id);
   if (accounts.length === 0) throw new HttpError(400, 'no accounts');
-  // 手動の更新の間隔は雀魂アカウントごと。内部 ID がまだ無い（初めての更新）アカウントは数えない
+  // 手動の更新の間隔は雀魂アカウントごと。内部 ID がまだ無い（初めての更新）アカウントは、仮の項目ごとに数える
   const now = ctx.deps.now();
+  const { store } = ctx.deps;
   for (const a of accounts) {
-    if (a.internalId && !(await ctx.deps.store.reserveRefresh(a.internalId, now, MIN_REFRESH_INTERVAL_MS))) {
-      throw new HttpError(429, 'refreshed too recently');
-    }
+    const ok = a.internalId
+      ? await store.reserveRefresh(a.internalId, now, MIN_REFRESH_INTERVAL_MS)
+      : await store.reservePendingRefresh(ranking.id, a.pendingId!, now, MIN_REFRESH_INTERVAL_MS);
+    if (!ok) throw new HttpError(429, 'refreshed too recently');
   }
   return enqueue(ctx, newJob(ctx.deps.newJobId(), 'refresh', { sub: ctx.user.sub, via }, now, { rankingId: ranking.id }));
 };

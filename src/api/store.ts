@@ -175,6 +175,11 @@ export interface Store {
   listRankingIdsForMajsoul(internalId: string): Promise<string[]>;
   /** 前回の受け付けから minIntervalMs たっていれば、受け付けた時刻を書いて true */
   reserveRefresh(internalId: string, now: Date, minIntervalMs: number): Promise<boolean>;
+  /**
+   * 表示用 ID で指定した仮の項目（内部 ID がまだ無い）の版。受け付けた時刻は仮の項目に書くので、内部 ID を引けば一緒に消える。
+   * 仮の項目が無ければ（その間に内部 ID を引いた・外した）true
+   */
+  reservePendingRefresh(rankingId: string, pendingId: string, now: Date, minIntervalMs: number): Promise<boolean>;
   markRefreshed(internalId: string, at: string, name?: string): Promise<void>;
   /** 候補の対局を書く（同じ uuid は上書き） */
   putCandidates(internalId: string, games: CandidateGame[]): Promise<void>;
@@ -557,6 +562,27 @@ export class DynamoStore implements Store {
       return true;
     } catch (e) {
       if (isConditionalFailure(e)) return false;
+      throw e;
+    }
+  }
+
+  async reservePendingRefresh(rankingId: string, pendingId: string, now: Date, minIntervalMs: number) {
+    try {
+      await this.doc.send(new UpdateCommand({
+        TableName: this.table,
+        Key: keys.pendingAccount(rankingId, pendingId),
+        UpdateExpression: 'SET lastRequestedAt = :now',
+        ConditionExpression: 'attribute_exists(pk) AND (attribute_not_exists(lastRequestedAt) OR lastRequestedAt <= :cutoff)',
+        ExpressionAttributeValues: {
+          ':now': now.toISOString(),
+          ':cutoff': new Date(now.getTime() - minIntervalMs).toISOString(),
+        },
+        ReturnValuesOnConditionCheckFailure: 'ALL_OLD',
+      }));
+      return true;
+    } catch (e) {
+      // 項目が無くて条件が外れたなら、もう仮の項目ではない（作り直さない）
+      if (isConditionalFailure(e)) return (e as { Item?: unknown }).Item === undefined;
       throw e;
     }
   }

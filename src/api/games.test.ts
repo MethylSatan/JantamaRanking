@@ -155,6 +155,15 @@ test('手動の候補の更新は、雀魂アカウントごとに数秒あけ�
   assert.equal((await t.call('POST', `${t.base}/refresh`, { token: 'admin' })).status, 202);
 });
 
+test('初めての候補の更新（表示用 ID で指定した直後）も、続けて送ると間隔の中なら 429', async () => {
+  const t = await prepare();
+  const first = await t.call('POST', `${t.base}/refresh`, { token: 'admin' });
+  assert.equal(first.status, 202);
+  assert.equal((await t.call('POST', `${t.base}/refresh`, { token: 'admin' })).status, 429);
+  t.advance(10_000);
+  assert.equal((await t.call('POST', `${t.base}/refresh`, { token: 'admin' })).status, 202);
+});
+
 test('雀魂アカウントが無ければ候補の更新は 400', async () => {
   const t = setup();
   const id = (await t.call('POST', '/api/rankings', { token: 'admin', body: { name: 'x' } })).body.id;
