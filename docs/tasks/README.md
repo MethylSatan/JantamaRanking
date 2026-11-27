@@ -27,7 +27,7 @@
 | [020](020-discord-login.md) | Discord ログインの接続 | 014 | done |
 | [021](021-host-verification.md) | 主催者の本人確認（行わないと決定） | 020、022 | done |
 | [022](022-authorization-design.md) | 権限の設計 | 020 | done |
-| [023](023-open-to-hosts.md) | 主催者への開放（申請と承認、Host の付け外し、利用者の削除） | 013、022 | doing |
+| [023](023-open-to-hosts.md) | 主催者への開放（申請と承認、Host の付け外し、利用者の削除） | 013、022 | done |
 | [024](024-api-foundation.md) | API の土台（認証・権限・ランキングの管理） | 020、022 | done |
 | [025](025-refresh-and-import.md) | 候補の更新と取り込み（雀魂への要求） | 024、006、012 | done |
 | [026](026-admin-ui.md) | 管理の画面 | 024、025 | done |
