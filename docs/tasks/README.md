@@ -8,7 +8,7 @@
 | [001](001-verify-current.md) | 現状コードの動作確認 | - | done |
 | [002](002-gas-alternative.md) | GAS 依存をやめる方式の検討（008 で決着） | 001 | done |
 | [003](003-import-gas-script.md) | GAS スクリプトとシートのサンプルをリポジトリに取り込む | - | done |
-| [004](004-readme-setup.md) | README の導入方法を書く | 013 | todo |
+| [004](004-help-page.md) | 利用者向けのヘルプページを書く（README から変更） | 013 | done |
 | [005](005-paifu-collection-method.md) | 牌譜の回収方式の検討 | 001 | done |
 | [006](006-collect-by-operator-account.md) | システム用の雀魂アカウントでの牌譜回収ツールの実装 | 005、007、011、016、017 | done |
 | [007](007-l2-login-investigation.md) | Node から直接ログインする方法（L2）の調査 | 005 | done |
@@ -38,6 +38,7 @@
 | [031](031-account-without-display-id.md) | 雀魂アカウントを表示用 ID なしで指定できるようにする | 024、026 | done |
 | [032](032-missed-games-warning.md) | 取りこぼしの警告を、主催者がリーグ以外の友人戦も打つ前提に直す | 025 | done |
 | [033](033-first-refresh-interval-again.md) | 初めての候補の更新の間隔を見直す（023 から分けた） | 023 | done |
+| [034](034-architecture-diagram.md) | 全体像の図を新しい方式に直す | 004 | todo |
 
 ## 新しいタスクの作り方
 - ファイル名は `NNN-短い名前.md`（連番）。この表にも行を足す

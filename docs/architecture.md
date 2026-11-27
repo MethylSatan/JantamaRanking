@@ -118,7 +118,7 @@ DynamoDB のテーブルは `pk`/`sk` のまま、GSI は足さない。件数�
 - 雀魂アカウントの指定で、ランキングの雀魂アカウントが32件以上になったら、CloudWatch Logs に `[通知]` を出す（上限は設けない。タスク 023）
 
 ### 管理の画面（タスク 026）
-`web/`（Vite の root）。入口は `web/admin.html`（閲覧は `web/ranking.html`。下の節）、出力は `dist/web/`。`web/public/` の `index.html`・`privacy.html`・`robots.txt` はそのままコピーする。
+`web/`（Vite の root）。入口は `web/admin.html`（閲覧は `web/ranking.html`。下の節）、出力は `dist/web/`。`web/public/` の `index.html`・`privacy.html`・`help.html`（使い方。画像は `help/`。タスク 004）・`robots.txt` はそのままコピーする。
 
 | ファイル | 内容 |
 |---|---|

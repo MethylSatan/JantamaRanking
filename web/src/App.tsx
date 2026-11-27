@@ -101,7 +101,7 @@ export function App() {
           ))}
       </main>
       <footer>
-        <a href="privacy.html">プライバシーポリシー</a>
+        <a href="help.html">使い方</a> ・ <a href="privacy.html">プライバシーポリシー</a>
       </footer>
     </>
   );

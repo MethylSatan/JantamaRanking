@@ -65,7 +65,7 @@ export function ViewerApp() {
         {load.state === 'ready' && <Ranking data={load.data} view={load.view} now={now} setView={setView} />}
       </main>
       <footer>
-        <a href="privacy.html">プライバシーポリシー</a>
+        <a href="help.html">使い方</a> ・ <a href="privacy.html">プライバシーポリシー</a>
       </footer>
     </>
   );
