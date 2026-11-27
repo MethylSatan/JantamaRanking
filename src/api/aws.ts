@@ -4,9 +4,19 @@
 import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { GetParameterCommand, SSMClient } from '@aws-sdk/client-ssm';
 import { InvokeCommand, LambdaClient } from '@aws-sdk/client-lambda';
+import {
+  AdminDeleteUserCommand,
+  AdminUserGlobalSignOutCommand,
+  CognitoIdentityProviderClient,
+  ListUsersCommand,
+  ListUsersInGroupCommand,
+  type UserType,
+} from '@aws-sdk/client-cognito-identity-provider';
 import { openSession, type CollectorDeps, type Credentials, type StateKey } from '../collector/index.ts';
 import type { RecordGameHead } from '../ranking/index.ts';
 import type { Blobs } from './blobs.ts';
+import { type Directory, type DirectoryUser } from './directory.ts';
+import { ADMIN_GROUP } from './authorize.ts';
 import type { OpenMajsoul } from './jobs.ts';
 
 const isNotFound = (e: unknown) => e instanceof Error && (e.name === 'NoSuchKey' || e.name === 'NotFound');
@@ -119,4 +129,68 @@ export function createStartJob(functionName: string, lambda = new LambdaClient({
       Payload: Buffer.from(JSON.stringify({ source: 'job', jobId })),
     }));
   };
+}
+
+const toDirectoryUser = (u: UserType): DirectoryUser | undefined => {
+  const sub = u.Attributes?.find((a) => a.Name === 'sub')?.Value;
+  if (!sub || !u.Username) return undefined;
+  return { sub, username: u.Username, createdAt: (u.UserCreateDate ?? new Date(0)).toISOString() };
+};
+
+/** Cognito のユーザープールの利用者（タスク 023）。数が小さい（上限50人）ので、一覧はその都度引く */
+export class CognitoDirectory implements Directory {
+  private readonly cognito: CognitoIdentityProviderClient;
+  private readonly poolId: string;
+
+  constructor(poolId: string, cognito = new CognitoIdentityProviderClient({})) {
+    this.poolId = poolId;
+    this.cognito = cognito;
+  }
+
+  private async list(filter?: string): Promise<DirectoryUser[]> {
+    const users: DirectoryUser[] = [];
+    let token: string | undefined;
+    do {
+      const res = await this.cognito.send(new ListUsersCommand({
+        UserPoolId: this.poolId,
+        AttributesToGet: ['sub'],
+        ...(filter ? { Filter: filter } : {}),
+        PaginationToken: token,
+      }));
+      for (const u of res.Users ?? []) {
+        const d = toDirectoryUser(u);
+        if (d) users.push(d);
+      }
+      token = res.PaginationToken;
+    } while (token);
+    return users;
+  }
+
+  listUsers() {
+    return this.list();
+  }
+
+  async findUser(sub: string) {
+    // sub は API が経路から受け取った UUID の形の値だけ（routes.ts）。念のため引用符を外す
+    return (await this.list(`sub = "${sub.replace(/"/g, '')}"`))[0];
+  }
+
+  async listAdminSubs() {
+    const subs: string[] = [];
+    let token: string | undefined;
+    do {
+      const res = await this.cognito.send(new ListUsersInGroupCommand({ UserPoolId: this.poolId, GroupName: ADMIN_GROUP, NextToken: token }));
+      for (const u of res.Users ?? []) {
+        const d = toDirectoryUser(u);
+        if (d) subs.push(d.sub);
+      }
+      token = res.NextToken;
+    } while (token);
+    return subs;
+  }
+
+  async deleteUser(username: string) {
+    await this.cognito.send(new AdminUserGlobalSignOutCommand({ UserPoolId: this.poolId, Username: username }));
+    await this.cognito.send(new AdminDeleteUserCommand({ UserPoolId: this.poolId, Username: username }));
+  }
 }

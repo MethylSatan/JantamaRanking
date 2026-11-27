@@ -1,5 +1,5 @@
 // 各 API の処理。024: 利用者、ランキングの管理、雀魂アカウントの指定、操作ログ。
-// 025: 候補の更新・取り込み・対象外・作り直し・公開 ID・ジョブ。一覧は docs/architecture.md「API」。
+// 025: 候補の更新・取り込み・対象外・作り直し・公開 ID・ジョブ。023: 申請・利用者・Host の付け外し。一覧は docs/architecture.md「API」。
 
 import { authorize, authorizeGlobal, isAdmin, PERMISSIONS, type Role, type User } from './authorize.ts';
 import type { Blobs } from './blobs.ts';
@@ -7,11 +7,14 @@ import { HttpError } from './errors.ts';
 import { randomUUID } from 'node:crypto';
 import { mergedCandidates, publishRanking, rankingPlayers } from './games.ts';
 import { MIN_REFRESH_INTERVAL_MS, newJob, type OpenMajsoul } from './jobs.ts';
-import type { Job, Ranking, RankingAccount, RankingSummary, Store } from './store.ts';
+import type { Job, Profile, Ranking, RankingAccount, RankingSummary, Store } from './store.ts';
+import { discordIdOf, type Directory } from './directory.ts';
 import { MAX_RECORDS_PER_RUN } from '../collector/index.ts';
 
 export interface Deps {
   store: Store;
+  /** Cognito の利用者 */
+  directory: Directory;
   blobs: Blobs;
   /** ジョブ ID */
   newJobId: () => string;
@@ -47,6 +50,11 @@ export interface Response {
 type Handler = (ctx: Context, params: string[]) => Promise<Response>;
 
 const NAME_MAX = 100;
+const NOTE_MAX = 500;
+/** 1つのランキングの雀魂アカウントがこの数以上になったら、管理人に知らせる（上限ではない。タスク 023） */
+export const ACCOUNT_ALERT_COUNT = 32;
+// Cognito の sub
+const SUB = '([0-9a-f-]{36})';
 const LOG_LIMIT = 100;
 // ランキング ID は randomUUID()
 const RANKING_ID = '([0-9a-f-]{36})';
@@ -60,6 +68,17 @@ const readName = (body: unknown): string => {
   const trimmed = name.trim();
   if (trimmed === '' || [...trimmed].length > NAME_MAX || /\p{Cc}/u.test(trimmed)) {
     throw new HttpError(400, `name must be 1-${NAME_MAX} characters`);
+  }
+  return trimmed;
+};
+
+// 申請のひとこと。空でもよい。改行は許す
+const readNote = (body: unknown): string => {
+  const note = (body as { note?: unknown } | null)?.note ?? '';
+  if (typeof note !== 'string') throw new HttpError(400, 'note must be a string');
+  const trimmed = note.trim();
+  if ([...trimmed].length > NOTE_MAX || /[\p{Cc}--[\n]]/v.test(trimmed)) {
+    throw new HttpError(400, `note must be at most ${NOTE_MAX} characters`);
   }
   return trimmed;
 };
@@ -127,14 +146,32 @@ const detail = async (store: Store, r: Ranking, via: Role) => ({
   via,
 });
 
-const me: Handler = async (ctx) => ({
-  status: 200,
-  body: { sub: ctx.user.sub, admin: isAdmin(ctx.user), permissions: PERMISSIONS },
-});
+/** 本人に返す利用者の情報 */
+const profileView = (p: Profile | undefined) =>
+  p ? { name: p.name, note: p.note, status: p.status, appliedAt: p.appliedAt } : undefined;
+
+const me: Handler = async (ctx) => {
+  const profile = profileView(await ctx.deps.store.getProfile(ctx.user.sub));
+  return {
+    status: 200,
+    body: { sub: ctx.user.sub, admin: isAdmin(ctx.user), permissions: PERMISSIONS, ...(profile ? { profile } : {}) },
+  };
+};
+
+const accountAlert = async (ctx: Context, ranking: Ranking) => {
+  const n = (await ctx.deps.store.listAccounts(ranking.id)).length;
+  if (n >= ACCOUNT_ALERT_COUNT) console.log(`[通知] ランキング ${ranking.id} の雀魂アカウントが ${n} 件になった`);
+};
 
 const listRankings: Handler = async (ctx) => {
   const { store } = ctx.deps;
-  if (isAdmin(ctx.user)) return { status: 200, body: { rankings: await store.listAllRankings() } };
+  if (isAdmin(ctx.user)) {
+    // 管理人には雀魂アカウントの数も返す（多いランキングに印を出す）
+    const rankings = await Promise.all(
+      (await store.listAllRankings()).map(async (r) => ({ ...r, accountCount: (await store.listAccounts(r.id)).length })),
+    );
+    return { status: 200, body: { rankings } };
+  }
   const ids = await ctx.deps.store.listRankingIdsForUser(ctx.user.sub);
   const rankings = (await Promise.all(ids.map((id) => store.getRanking(id))))
     .filter((r): r is Ranking => r !== undefined)
@@ -199,7 +236,10 @@ const addAccount: Handler = async (ctx, [id, rawInternalId]) => {
     addedBy: ctx.user.sub,
     addedAt: ctx.deps.now().toISOString(),
   });
-  if (added) await log(ctx, ranking.id, via, 'addAccount', internalId, name !== undefined ? { name } : undefined);
+  if (added) {
+    await log(ctx, ranking.id, via, 'addAccount', internalId, name !== undefined ? { name } : undefined);
+    await accountAlert(ctx, ranking);
+  }
   return { status: added ? 201 : 200, body: await detail(ctx.deps.store, ranking, via) };
 };
 
@@ -215,6 +255,7 @@ const addAccountByDisplayId: Handler = async (ctx, [id]) => {
   const pendingId = randomUUID();
   await store.addPendingAccount(ranking.id, { pendingId, displayId, addedBy: ctx.user.sub, addedAt: ctx.deps.now().toISOString() });
   await log(ctx, ranking.id, via, 'addAccount', undefined, { byDisplayId: true });
+  await accountAlert(ctx, ranking);
   return { status: 201, body: await detail(store, ranking, via) };
 };
 
@@ -374,8 +415,140 @@ const getJob: Handler = async (ctx, [jobId]) => {
   return { status: 200, body: { job } };
 };
 
+// --- 申請・利用者・Host の付け外し（タスク 023） ---
+// 誰でも Discord でログインでき（pre sign-up は人数だけ見る）、本人が申請し、管理人が承認して Host に付ける。
+// 申請と取り下げは、ログインした人なら誰でもできる（権限の表には入れない。GET /api/me と同じ扱い）
+
+/** 申請する・書き直す。承認済みなら状態はそのまま */
+const putMyProfile: Handler = async (ctx) => {
+  const body = ctx.body();
+  const name = readName(body);
+  const note = readNote(body);
+  const { store, directory } = ctx.deps;
+  // 消した利用者のトークンは期限（1時間）まで効くので、Cognito に残っているかを確かめる
+  const user = await directory.findUser(ctx.user.sub);
+  const discordId = user && discordIdOf(user.username);
+  if (!discordId) throw new HttpError(401, 'unauthorized');
+  const current = await store.getProfile(ctx.user.sub);
+  const now = ctx.deps.now().toISOString();
+  const profile: Profile = current
+    ? { ...current, discordId, name, note }
+    : {
+        discordId,
+        name,
+        note,
+        // 管理人は申請しなくても全体の権限を持つので、書いたら承認済みにする
+        status: isAdmin(ctx.user) ? 'approved' : 'pending',
+        appliedAt: now,
+        ...(isAdmin(ctx.user) ? { approvedAt: now, approvedBy: ctx.user.sub } : {}),
+      };
+  await store.putProfile(ctx.user.sub, profile);
+  return { status: 200, body: { profile: profileView(profile) } };
+};
+
+/**
+ * 利用者を消す: Host の項目（ランキングごとに操作ログ）→ 利用者の情報 → Cognito の利用者。
+ * 操作ログには sub だけが残る（Discord の規約。docs/local/014-login-notes.md）
+ */
+const removeUser = async (ctx: Context, sub: string, via: Role) => {
+  const { store, directory } = ctx.deps;
+  for (const rankingId of await store.listRankingIdsForUser(sub)) {
+    if (await store.removeHost(rankingId, sub)) await log(ctx, rankingId, via, 'removeHost', sub);
+  }
+  await store.deleteProfile(sub);
+  const user = await directory.findUser(sub);
+  if (user) await directory.deleteUser(user.username);
+};
+
+/** 取り下げ・やめる（本人）。管理人は CLI で外す */
+const deleteMe: Handler = async (ctx) => {
+  if (isAdmin(ctx.user)) throw new HttpError(400, 'admin cannot delete self');
+  const hosting = (await ctx.deps.store.listRankingIdsForUser(ctx.user.sub)).length > 0;
+  await removeUser(ctx, ctx.user.sub, 'host');
+  return { status: 200, body: { deleted: true, wasHost: hosting } };
+};
+
+const listUsers: Handler = async (ctx) => {
+  authorizeGlobal(ctx.user, 'manageUsers');
+  const { store, directory } = ctx.deps;
+  const [users, admins] = await Promise.all([directory.listUsers(), directory.listAdminSubs()]);
+  const adminSet = new Set(admins);
+  const rows = await Promise.all(
+    users.map(async (u) => {
+      const [p, rankingIds] = await Promise.all([store.getProfile(u.sub), store.listRankingIdsForUser(u.sub)]);
+      return {
+        sub: u.sub,
+        discordId: discordIdOf(u.username) ?? null,
+        createdAt: u.createdAt,
+        admin: adminSet.has(u.sub),
+        ...(p ? { name: p.name, note: p.note, status: p.status, appliedAt: p.appliedAt } : {}),
+        rankingIds,
+      };
+    }),
+  );
+  // 申請の新しい順、申請の無い人（ログインだけ）はその後
+  rows.sort((a, b) => (b.appliedAt ?? '').localeCompare(a.appliedAt ?? '') || b.createdAt.localeCompare(a.createdAt));
+  return { status: 200, body: { users: rows } };
+};
+
+const approveUser: Handler = async (ctx, [sub]) => {
+  authorizeGlobal(ctx.user, 'manageUsers');
+  const { store } = ctx.deps;
+  const p = await store.getProfile(sub!);
+  if (!p) throw new HttpError(404, 'not applied');
+  if (p.status !== 'approved') {
+    await store.putProfile(sub!, { ...p, status: 'approved', approvedAt: ctx.deps.now().toISOString(), approvedBy: ctx.user.sub });
+  }
+  return { status: 200, body: { approved: true } };
+};
+
+/** 却下・やめる（管理人）。管理人は消せない（CLI でグループから外してから） */
+const deleteUser: Handler = async (ctx, [sub]) => {
+  const { via } = authorizeGlobal(ctx.user, 'manageUsers');
+  if ((await ctx.deps.directory.listAdminSubs()).includes(sub!)) throw new HttpError(400, 'cannot delete admin');
+  await removeUser(ctx, sub!, via);
+  return { status: 200, body: { deleted: true } };
+};
+
+const hostViews = async (store: Store, rankingId: string) =>
+  Promise.all(
+    (await store.listHosts(rankingId)).map(async (h) => {
+      const p = await store.getProfile(h.sub);
+      return { sub: h.sub, ...(p ? { name: p.name, discordId: p.discordId } : {}), addedAt: h.addedAt };
+    }),
+  );
+
+const listHosts: Handler = async (ctx, [id]) => {
+  const { ranking } = await authorize(ctx.user, 'manageHosts', id!, ctx.deps.store);
+  return { status: 200, body: { hosts: await hostViews(ctx.deps.store, ranking.id) } };
+};
+
+/** Host に付ける。承認済みの人だけ */
+const addHost: Handler = async (ctx, [id, sub]) => {
+  const { via, ranking } = await authorize(ctx.user, 'manageHosts', id!, ctx.deps.store);
+  const { store } = ctx.deps;
+  if ((await store.getProfile(sub!))?.status !== 'approved') throw new HttpError(400, 'user is not approved');
+  const added = await store.addHost(ranking.id, { sub: sub!, addedBy: ctx.user.sub, addedAt: ctx.deps.now().toISOString() });
+  if (added) await log(ctx, ranking.id, via, 'addHost', sub);
+  return { status: added ? 201 : 200, body: { hosts: await hostViews(store, ranking.id) } };
+};
+
+const removeHost: Handler = async (ctx, [id, sub]) => {
+  const { via, ranking } = await authorize(ctx.user, 'manageHosts', id!, ctx.deps.store);
+  if (await ctx.deps.store.removeHost(ranking.id, sub!)) await log(ctx, ranking.id, via, 'removeHost', sub);
+  return { status: 200, body: { hosts: await hostViews(ctx.deps.store, ranking.id) } };
+};
+
 const routes: [method: string, pattern: RegExp, handler: Handler][] = [
   ['GET', /^\/api\/me$/, me],
+  ['DELETE', /^\/api\/me$/, deleteMe],
+  ['PUT', /^\/api\/me\/profile$/, putMyProfile],
+  ['GET', /^\/api\/users$/, listUsers],
+  ['POST', new RegExp(`^/api/users/${SUB}/approve$`), approveUser],
+  ['DELETE', new RegExp(`^/api/users/${SUB}$`), deleteUser],
+  ['GET', new RegExp(`^/api/rankings/${RANKING_ID}/hosts$`), listHosts],
+  ['PUT', new RegExp(`^/api/rankings/${RANKING_ID}/hosts/${SUB}$`), addHost],
+  ['DELETE', new RegExp(`^/api/rankings/${RANKING_ID}/hosts/${SUB}$`), removeHost],
   ['GET', /^\/api\/rankings$/, listRankings],
   ['POST', /^\/api\/rankings$/, createRanking],
   ['GET', new RegExp(`^/api/rankings/${RANKING_ID}$`), getRanking],

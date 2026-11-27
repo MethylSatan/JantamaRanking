@@ -85,6 +85,31 @@ export interface GameState {
   changedAt: string;
 }
 
+export type ProfileStatus = 'pending' | 'approved';
+
+/**
+ * 利用者の情報（`USER#<sub>` / `PROFILE`。タスク 023）。申請で本人が書く。
+ * Discord の ID・名前はこの項目にだけ置き、操作ログや Host の項目には書かない（消すときはこの項目と Cognito の利用者を消す）
+ */
+export interface Profile {
+  discordId: string;
+  /** 本人が書いた名前 */
+  name: string;
+  /** 本人が書いたひとこと（どのリーグか、連絡先など） */
+  note: string;
+  status: ProfileStatus;
+  appliedAt: string;
+  approvedAt?: string;
+  approvedBy?: string;
+}
+
+/** ランキングの Host（`RANKING#<ID>` / `MEMBER#<sub>`） */
+export interface HostEntry {
+  sub: string;
+  addedBy: string;
+  addedAt: string;
+}
+
 export type JobKind = 'refresh' | 'import' | 'rebuild';
 export type JobStatus = 'queued' | 'running' | 'done' | 'failed';
 
@@ -116,6 +141,14 @@ export interface Store {
   /** Host として付いているランキングの ID（逆向きの項目から） */
   listRankingIdsForUser(sub: string): Promise<string[]>;
   isHost(rankingId: string, sub: string): Promise<boolean>;
+  /** Host の項目と逆向きの項目を一緒に書く。すでに付いていれば false */
+  addHost(rankingId: string, host: HostEntry): Promise<boolean>;
+  /** Host の項目と逆向きの項目を一緒に消す。付いていなければ false */
+  removeHost(rankingId: string, sub: string): Promise<boolean>;
+  listHosts(rankingId: string): Promise<HostEntry[]>;
+  getProfile(sub: string): Promise<Profile | undefined>;
+  putProfile(sub: string, profile: Profile): Promise<void>;
+  deleteProfile(sub: string): Promise<void>;
   /** 内部 ID で指定する。雀魂アカウント → ランキングと、定期取得用の一覧の項目も作る。すでにあれば何もせず false */
   addAccount(rankingId: string, account: LinkedAccount): Promise<boolean>;
   /** 表示用 ID で指定する（仮の項目）。同じ pendingId があれば false */
@@ -165,6 +198,7 @@ export const keys = {
   rankingListEntry: (id: string) => ({ pk: 'RANKINGS', sk: `RANKING#${id}` }),
   member: (rankingId: string, sub: string) => ({ pk: `RANKING#${rankingId}`, sk: `MEMBER#${sub}` }),
   userRanking: (sub: string, rankingId: string) => ({ pk: `USER#${sub}`, sk: `RANKING#${rankingId}` }),
+  profile: (sub: string) => ({ pk: `USER#${sub}`, sk: 'PROFILE' }),
   account: (rankingId: string, internalId: string) => ({ pk: `RANKING#${rankingId}`, sk: `ACCOUNT#${internalId}` }),
   pendingAccount: (rankingId: string, pendingId: string) => ({ pk: `RANKING#${rankingId}`, sk: `ACCOUNT#PENDING#${pendingId}` }),
   log: (rankingId: string, at: string, suffix: string) => ({ pk: `RANKING#${rankingId}`, sk: `LOG#${at}#${suffix}` }),
@@ -307,6 +341,67 @@ export class DynamoStore implements Store {
   async isHost(rankingId: string, sub: string) {
     const res = await this.doc.send(new GetCommand({ TableName: this.table, Key: keys.member(rankingId, sub) }));
     return res.Item?.role === 'host';
+  }
+
+  async addHost(rankingId: string, h: HostEntry) {
+    try {
+      await this.doc.send(new TransactWriteCommand({
+        TransactItems: [
+          {
+            Put: {
+              TableName: this.table,
+              Item: { ...keys.member(rankingId, h.sub), role: 'host', addedBy: h.addedBy, addedAt: h.addedAt },
+              ConditionExpression: 'attribute_not_exists(pk)',
+            },
+          },
+          { Put: { TableName: this.table, Item: { ...keys.userRanking(h.sub, rankingId), role: 'host' } } },
+        ],
+      }));
+      return true;
+    } catch (e) {
+      if (isConditionalFailure(e)) return false;
+      throw e;
+    }
+  }
+
+  async removeHost(rankingId: string, sub: string) {
+    try {
+      await this.doc.send(new TransactWriteCommand({
+        TransactItems: [
+          { Delete: { TableName: this.table, Key: keys.member(rankingId, sub), ConditionExpression: 'attribute_exists(pk)' } },
+          { Delete: { TableName: this.table, Key: keys.userRanking(sub, rankingId) } },
+        ],
+      }));
+      return true;
+    } catch (e) {
+      if (!isConditionalFailure(e)) throw e;
+      // Host の項目が無い。逆向きの項目だけ残っていれば消しておく
+      await this.doc.send(new DeleteCommand({ TableName: this.table, Key: keys.userRanking(sub, rankingId) }));
+      return false;
+    }
+  }
+
+  async listHosts(rankingId: string) {
+    const items = await this.queryAll({
+      KeyConditionExpression: 'pk = :pk AND begins_with(sk, :prefix)',
+      ExpressionAttributeValues: { ':pk': `RANKING#${rankingId}`, ':prefix': 'MEMBER#' },
+    });
+    return items
+      .filter((i) => i.role === 'host')
+      .map((i) => ({ sub: String(i.sk).slice('MEMBER#'.length), addedBy: i.addedBy, addedAt: i.addedAt }));
+  }
+
+  async getProfile(sub: string) {
+    const res = await this.doc.send(new GetCommand({ TableName: this.table, Key: keys.profile(sub) }));
+    return res.Item ? strip<Profile>(res.Item) : undefined;
+  }
+
+  async putProfile(sub: string, profile: Profile) {
+    await this.doc.send(new PutCommand({ TableName: this.table, Item: { ...keys.profile(sub), ...profile } }));
+  }
+
+  async deleteProfile(sub: string) {
+    await this.doc.send(new DeleteCommand({ TableName: this.table, Key: keys.profile(sub) }));
   }
 
   async addAccount(rankingId: string, a: LinkedAccount) {

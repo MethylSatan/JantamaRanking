@@ -1,24 +1,36 @@
-// Cognito の pre sign-up トリガー。Discord からの初回のログインで、許可した Discord の ID だけ利用者を作らせる。
-// 許可の一覧は SSM の StringList（カンマ区切り。値は手で入れる。docs/deploy.md）。Discord の規約に沿い、
-// 許可していない人のデータは残さない（ログにも ID を書かない）。
-import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
+// Cognito の pre sign-up トリガー。Discord からの初回のログインで利用者を作らせる（タスク 023）。
+// 誰でもログインでき、本人が画面で申請し、管理人が承認する（承認と Host の付け外しは API）。
+// 利用者の数は Cognito の無料の範囲（MAX_USERS。Discord 連携は月50人まで無料）に抑え、超えたら断る。
+// 断った人のデータは残さない（ログにも ID を書かない）。
+import { CognitoIdentityProviderClient, ListUsersCommand } from '@aws-sdk/client-cognito-identity-provider';
 
-const ssm = new SSMClient({});
+const cognito = new CognitoIdentityProviderClient({});
+const MAX_USERS = Number(process.env.MAX_USERS);
+
+/** 利用者の数（limit に届いたらそこで止める） */
+async function countUsers(userPoolId, limit) {
+  let count = 0;
+  let token;
+  do {
+    const res = await cognito.send(new ListUsersCommand({ UserPoolId: userPoolId, AttributesToGet: [], PaginationToken: token }));
+    count += res.Users?.length ?? 0;
+    token = res.PaginationToken;
+  } while (token && count < limit);
+  return count;
+}
 
 export const handler = async (event) => {
   if (event.triggerSource !== 'PreSignUp_ExternalProvider') {
     throw new Error('この方法では登録できません');
   }
   // 連携の利用者名は「<IdP の名前>_<IdP の sub>」の形
-  const match = /^Discord_(\d+)$/i.exec(event.userName ?? '');
-  if (!match) {
-    throw new Error('このアカウントは許可されていません');
+  if (!/^Discord_\d+$/i.test(event.userName ?? '')) {
+    throw new Error('このアカウントは使えません');
   }
-  const { Parameter } = await ssm.send(new GetParameterCommand({ Name: process.env.ALLOWED_IDS_PARAMETER }));
-  const allowed = (Parameter?.Value ?? '').split(',').map((s) => s.trim());
-  if (!allowed.includes(match[1])) {
-    console.log('rejected');
-    throw new Error('このアカウントは許可されていません');
+  if (!(MAX_USERS > 0)) throw new Error('MAX_USERS がない');
+  if ((await countUsers(event.userPoolId, MAX_USERS)) >= MAX_USERS) {
+    console.log('rejected: full');
+    throw new Error('いまは新しい登録を受け付けていません');
   }
   console.log('allowed');
   return event;

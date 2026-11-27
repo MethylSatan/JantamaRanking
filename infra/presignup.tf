@@ -1,7 +1,8 @@
-# Cognito の pre sign-up トリガー（lambda/presignup/index.mjs）。許可していない Discord の ID では利用者を作らない。
+# Cognito の pre sign-up トリガー（lambda/presignup/index.mjs）。Discord からのログインなら誰でも利用者を作るが、
+# 人数が Cognito の無料の範囲（50人）を超えたら断る。承認は画面で管理人が行う（タスク 023）。
 # コードが小さく、変更も少ないので、API の Lambda と違って Terraform が載せる（GitHub Actions のデプロイの対象外）
 locals {
-  allowed_ids_parameter = "/${local.name}/allowed-discord-ids"
+  max_users = 50
 }
 
 data "archive_file" "presignup" {
@@ -26,10 +27,11 @@ data "aws_iam_policy_document" "presignup" {
     resources = ["${aws_cloudwatch_log_group.presignup.arn}:*"]
   }
 
-  # 許可の一覧。値は手で入れる（Terraform に書かない）
+  # 利用者の数を数える。ユーザープールの ID はイベントで届くので、関数の環境変数には持たない
+  # （ここで ARN を参照しても、ユーザープール → 関数 → ロールの依存は循環しない）
   statement {
-    actions   = ["ssm:GetParameter"]
-    resources = ["arn:aws:ssm:ap-northeast-1:${data.aws_caller_identity.current.account_id}:parameter${local.allowed_ids_parameter}"]
+    actions   = ["cognito-idp:ListUsers"]
+    resources = [aws_cognito_user_pool.main.arn]
   }
 }
 
@@ -53,7 +55,7 @@ resource "aws_lambda_function" "presignup" {
 
   environment {
     variables = {
-      ALLOWED_IDS_PARAMETER = local.allowed_ids_parameter
+      MAX_USERS = local.max_users
     }
   }
 

@@ -3,7 +3,7 @@
 
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { User } from './authorize.ts';
-import { createOpenMajsoul, createStartJob, S3Blobs } from './aws.ts';
+import { CognitoDirectory, createOpenMajsoul, createStartJob, S3Blobs } from './aws.ts';
 import { HttpError } from './errors.ts';
 import { newJob, runJob } from './jobs.ts';
 import { createJwksFetcher, verifyCognitoToken } from './jwt.ts';
@@ -119,6 +119,7 @@ const getProdDeps = (): HandlerDeps => {
   const blobs = new S3Blobs(env('DATA_BUCKET'), env('SITE_BUCKET'));
   prodDeps = {
     store: new DynamoStore(env('TABLE_NAME')),
+    directory: new CognitoDirectory(env('USER_POOL_ID')),
     blobs,
     newJobId: () => randomUUID(),
     startJob: createStartJob(env('AWS_LAMBDA_FUNCTION_NAME')),

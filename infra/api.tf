@@ -139,6 +139,15 @@ data "aws_iam_policy_document" "api" {
     resources = [aws_dynamodb_table.main.arn, "${aws_dynamodb_table.main.arn}/index/*"]
   }
 
+  # 利用者の一覧・削除（タスク 023。申請の却下、利用者をやめる）
+  statement {
+    actions = [
+      "cognito-idp:ListUsers", "cognito-idp:ListUsersInGroup",
+      "cognito-idp:AdminUserGlobalSignOut", "cognito-idp:AdminDeleteUser",
+    ]
+    resources = [aws_cognito_user_pool.main.arn]
+  }
+
   # 認証情報と定義の鍵。値は手で入れる（Terraform に書かない）。SecureString の既定の鍵（aws/ssm）で復号できる
   statement {
     actions   = ["ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath", "ssm:PutParameter"]

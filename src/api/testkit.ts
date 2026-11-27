@@ -3,6 +3,7 @@
 import { LIST_LIMIT, type Session } from '../collector/index.ts';
 import type { User } from './authorize.ts';
 import { MemoryBlobs } from './blobs.ts';
+import { MemoryDirectory } from './directory.ts';
 import { HttpError } from './errors.ts';
 import { createHandler, type FunctionUrlEvent } from './handler.ts';
 import type { OpenMajsoul } from './jobs.ts';
@@ -32,6 +33,14 @@ export const USERS: Record<string, User> = {
   admin: { sub: 'sub-admin', groups: ['admins', 'pool_Discord'] },
   host: { sub: 'sub-host', groups: ['pool_Discord'] },
   stranger: { sub: 'sub-stranger', groups: ['pool_Discord'] },
+  applicant: { sub: 'sub-applicant', groups: ['pool_Discord'] },
+};
+
+// 経路は sub を UUID の形で受け取るので、利用者の一覧・Host の付け外しのテストはこちらを使う
+export const UUID_USERS: Record<string, User> = {
+  alice: { sub: 'aaaaaaaa-0000-4000-8000-000000000001', groups: ['pool_Discord'] },
+  bob: { sub: 'bbbbbbbb-0000-4000-8000-000000000002', groups: ['pool_Discord'] },
+  boss: { sub: 'cccccccc-0000-4000-8000-000000000003', groups: ['admins', 'pool_Discord'] },
 };
 
 /** 偽の雀魂。表示用 ID → 内部 ID、内部 ID ごとの友人戦の一覧、牌譜（head） */
@@ -112,12 +121,19 @@ export const setup = () => {
   const store = new MemoryStore();
   const blobs = new MemoryBlobs();
   const majsoul = new FakeMajsoul();
+  const directory = new MemoryDirectory();
+  let discord = 100;
+  // テスト用の利用者は、みな一度ログインして Cognito に利用者がある
+  for (const u of Object.values({ ...USERS, ...UUID_USERS })) {
+    directory.add(u.sub, String(++discord), { admin: u.groups.includes('admins') });
+  }
   const started: string[] = [];
   let n = 0;
   let clock = Date.parse('2026-11-25T00:00:00Z');
   const h = createHandler(() => ({
     store,
     blobs,
+    directory,
     now: () => new Date((clock += 1000)),
     newRankingId: () => `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}`,
     newPublicId: () => `public-${++n}`,
@@ -131,7 +147,7 @@ export const setup = () => {
       clock += ms;
     },
     verifyToken: async (token) => {
-      const user = USERS[token];
+      const user = USERS[token] ?? UUID_USERS[token];
       if (!user) throw new HttpError(401, 'unauthorized');
       return user;
     },
@@ -147,5 +163,5 @@ export const setup = () => {
   const advance = (ms: number) => {
     clock += ms;
   };
-  return { store, blobs, majsoul, started, h, call, runStarted, advance };
+  return { store, blobs, majsoul, directory, started, h, call, runStarted, advance };
 };

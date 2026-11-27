@@ -5,6 +5,8 @@ import {
   strip,
   type CandidateGame,
   type GameState,
+  type HostEntry,
+  type Profile,
   type Job,
   type JobStatus,
   type LogEntry,
@@ -34,10 +36,37 @@ export class MemoryStore implements Store {
       .sort((a, b) => (a.sk < b.sk ? -1 : a.sk > b.sk ? 1 : 0));
   }
 
-  /** テスト用: Host を付ける（Host の項目と逆向きの項目） */
-  addHost(rankingId: string, sub: string) {
-    this.put(keys.member(rankingId, sub), { role: 'host', addedBy: 'test', addedAt: 'test' });
-    this.put(keys.userRanking(sub, rankingId), { role: 'host' });
+  /** Host を付ける（Host の項目と逆向きの項目）。テストでは sub だけ渡してもよい */
+  async addHost(rankingId: string, host: HostEntry | string) {
+    const h = typeof host === 'string' ? { sub: host, addedBy: 'test', addedAt: 'test' } : host;
+    if (this.get(keys.member(rankingId, h.sub))) return false;
+    this.put(keys.member(rankingId, h.sub), { role: 'host', addedBy: h.addedBy, addedAt: h.addedAt });
+    this.put(keys.userRanking(h.sub, rankingId), { role: 'host' });
+    return true;
+  }
+
+  async removeHost(rankingId: string, sub: string) {
+    this.items.delete(this.id(keys.userRanking(sub, rankingId)));
+    return this.items.delete(this.id(keys.member(rankingId, sub)));
+  }
+
+  async listHosts(rankingId: string) {
+    return this.query(`RANKING#${rankingId}`, 'MEMBER#')
+      .filter((i) => i.role === 'host')
+      .map((i) => ({ sub: String(i.sk).slice('MEMBER#'.length), addedBy: i.addedBy, addedAt: i.addedAt }));
+  }
+
+  async getProfile(sub: string) {
+    const item = this.get(keys.profile(sub));
+    return item ? strip<Profile>(structuredClone(item)) : undefined;
+  }
+
+  async putProfile(sub: string, profile: Profile) {
+    this.put(keys.profile(sub), profile);
+  }
+
+  async deleteProfile(sub: string) {
+    this.items.delete(this.id(keys.profile(sub)));
   }
 
   async getRanking(id: string) {
