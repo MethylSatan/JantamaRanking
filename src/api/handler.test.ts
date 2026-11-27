@@ -63,7 +63,7 @@ test('Admin の一連の操作と操作ログ', async () => {
 
   const deleted = await call('DELETE', `/api/rankings/${id}`, { token: 'admin' });
   assert.equal(deleted.body.state, 'deleted');
-  assert.deepEqual((await call('GET', '/api/rankings', { token: 'admin' })).body.rankings, [{ id, name: '半荘戦', state: 'deleted' }]);
+  assert.deepEqual((await call('GET', '/api/rankings', { token: 'admin' })).body.rankings, [{ id, name: '半荘戦', state: 'deleted', accountCount: 1 }]);
 
   const logs = (await call('GET', `/api/rankings/${id}/logs`, { token: 'admin' })).body.logs;
   assert.deepEqual(
