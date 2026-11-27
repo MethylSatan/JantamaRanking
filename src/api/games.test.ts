@@ -308,3 +308,27 @@ test('ランキングの対局の参加者から選んで、内部 ID で指定�
   const log = (await t.call('GET', `${t.base}/logs`, { token: 'admin' })).body.logs[0];
   assert.deepEqual([log.op, log.target, log.detail], ['addAccount', '2', { name: 'い' }]);
 });
+
+test('取りこぼしの警告: 未処理の対局が残っていても出ず、前回の更新から一覧の上限を超えて増えたときだけ出る', async () => {
+  const t = await prepare();
+  const four = (uuid: string, sec: number) =>
+    t.majsoul.game(uuid, sec, [['主催', HOST_ID, 40000, 30000], ['い', 2, 30000, 10000], ['ろ', 3, 20000, -10000], ['は', 4, 10000, -30000]], [HOST_ID]);
+  const warningsOf = async () => {
+    const job = await t.job(await t.call('POST', `${t.base}/refresh`, { token: 'admin' }));
+    assert.equal(job.status, 'done', job.error);
+    return job.result.accounts[0].warnings as string[];
+  };
+  // 四麻を上限まで（すべて未処理。リーグ以外の友人戦のつもり）。初めての更新は「これより古い対局は取れない」だけ
+  for (let i = 0; i < 50; i++) four(`a${i}`, 1_810_000_000 + i * 3600);
+  assert.deepEqual((await warningsOf()).map((w) => /取れない/.test(w)), [true]);
+  // 上限の範囲で増えただけなら、未処理が残っていても警告しない
+  t.advance(10_000);
+  for (let i = 0; i < 10; i++) four(`b${i}`, 1_820_000_000 + i * 3600);
+  assert.deepEqual(await warningsOf(), []);
+  // 前回の更新から50件を超えて増えると、前回の一番新しい対局が一覧から外れる → 取りこぼし
+  t.advance(10_000);
+  for (let i = 0; i < 51; i++) four(`c${i}`, 1_830_000_000 + i * 3600);
+  const w = await warningsOf();
+  assert.equal(w.length, 1);
+  assert.match(w[0]!, /^四麻: .*取りこぼした/);
+});

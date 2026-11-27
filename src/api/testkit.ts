@@ -1,6 +1,6 @@
 // API のテストの共通の準備。メモリの Store と S3、偽の雀魂（実在の対局・ニックネームは使わない）。
 
-import type { Session } from '../collector/index.ts';
+import { LIST_LIMIT, type Session } from '../collector/index.ts';
 import type { User } from './authorize.ts';
 import { MemoryBlobs } from './blobs.ts';
 import { HttpError } from './errors.ts';
@@ -92,7 +92,9 @@ export class FakeMajsoul {
         if (method === 'Lobby.searchAccountByEid') return { account_id: this.eids.get(body.eid as number) };
         if (method === 'Lobby.fetchAccountInfoExtra') {
           const list = this.lists.get(body.account_id as number);
-          return { recent_games: list ? list[body.category === 1 ? '4p' : '3p'] : [] };
+          // 雀魂と同じく、新しい方から LIST_LIMIT 件まで
+          const games = list ? [...list[body.category === 1 ? '4p' : '3p']] : [];
+          return { recent_games: games.sort((a, b) => b.start_time - a.start_time).slice(0, LIST_LIMIT) };
         }
         if (method === 'Lobby.fetchGameRecordsDetail') {
           return { record_list: (body.uuid_list as string[]).map((u) => this.heads.get(u)).filter(Boolean) };

@@ -2,7 +2,7 @@
 // API がジョブの項目を作って自分の Lambda を非同期で起動し、起動された側が runJob で処理する。
 
 import { isDeepStrictEqual } from 'node:util';
-import { fetchHeads, listCandidates, type CandidateList, type Host, type Session } from '../collector/index.ts';
+import { fetchHeads, listCandidates, listWarnings, type CandidateList, type Host, type Session } from '../collector/index.ts';
 import { fromRecordGame, type RecordGameHead } from '../ranking/index.ts';
 import type { Blobs } from './blobs.ts';
 import { publishRanking } from './games.ts';
@@ -125,18 +125,23 @@ async function logJob(deps: JobDeps, job: Job, detail: Record<string, unknown>) 
 const selfName = (list: CandidateList): string | undefined =>
   list.all.flatMap((g) => g.players).find((p) => p.accountId === list.accountId)?.nickname;
 
-/** 一覧を保存する。候補は処理済みも含めて全件を書く（ランキングごとの状態は別に持つ） */
-async function saveList(deps: JobDeps, list: CandidateList) {
+/**
+ * 一覧を保存し、取りこぼしの警告を返す。候補は処理済みも含めて全件を書く（ランキングごとの状態は別に持つ）。
+ * 警告は、保存してある前回までの一覧と比べて出す（`listWarnings`）ので、書く前に読む
+ */
+async function saveList(deps: JobDeps, list: CandidateList): Promise<string[]> {
   const internalId = String(list.accountId);
+  const warnings = listWarnings(await deps.store.listCandidates(internalId), list.all);
   await deps.store.putCandidates(internalId, list.all);
   await deps.store.markRefreshed(internalId, deps.now().toISOString(), selfName(list));
+  return warnings;
 }
 
-const summarize = (list: CandidateList) => ({
+const summarize = (list: CandidateList, warnings: string[]) => ({
   internalId: String(list.accountId),
   returned: list.returned,
   newCandidates: list.candidates.length,
-  warnings: list.warnings,
+  warnings,
 });
 
 async function refreshRanking(
@@ -161,10 +166,9 @@ async function refreshRanking(
     const ref = a.internalId ? { internalId: a.internalId } : { pendingId: a.pendingId };
     try {
       const list = await listCandidates(await getSession(), host, (u) => known.has(u));
-      const summary = summarize(list);
       const name = selfName(list);
-      if (a.pendingId) await store.resolvePendingAccount(rankingId, a.pendingId, summary.internalId, name);
-      await saveList(deps, list);
+      if (a.pendingId) await store.resolvePendingAccount(rankingId, a.pendingId, String(list.accountId), name);
+      const summary = summarize(list, await saveList(deps, list));
       results.push({ ...ref, ...summary, ...(name !== undefined ? { name } : {}) });
     } catch (e) {
       // 1つのアカウントの失敗（表示用 ID が見つからない など）で、ほかのアカウントを止めない
@@ -187,14 +191,13 @@ async function refreshAll(deps: JobDeps, getSession: () => Promise<Session>, pro
   for (const internalId of ids) {
     await progress(`雀魂アカウント ${internalId} の一覧を取っています`);
     try {
-      // 取りこぼしの警告のため、指しているランキングのどれかで処理済みなら既知とする
+      // 新しい候補の数を数えるため、指しているランキングのどれかで処理済みなら既知とする
       const known = new Set<string>();
       for (const rid of await store.listRankingIdsForMajsoul(internalId)) {
         for (const s of await store.listGameStates(rid)) known.add(s.uuid);
       }
       const list = await listCandidates(await getSession(), { accountId: Number(internalId) }, (u) => known.has(u));
-      await saveList(deps, list);
-      const summary = summarize(list);
+      const summary = summarize(list, await saveList(deps, list));
       if (summary.warnings.length) console.error(`[通知] 雀魂アカウント ${internalId}: ${summary.warnings.join(' / ')}`);
       results.push(summary);
     } catch (e) {

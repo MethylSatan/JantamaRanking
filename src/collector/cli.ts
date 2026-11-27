@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fromRecordGame, type RecordGameHead } from '../ranking/index.ts';
-import { fetchHeads, gameLength, listCandidates, type Candidate, type Host } from './collect.ts';
+import { fetchHeads, gameLength, listCandidates, listWarnings, type Candidate, type Host } from './collect.ts';
 import { DEFAULT_COLLECTOR_DIR, localCollectorDeps, readJsonFile, writeJsonFile } from './local.ts';
 import { loadState, openSession, refreshState } from './session.ts';
 
@@ -88,9 +88,14 @@ async function main(argv: string[]) {
       try {
         const isKnown = (u: string) => u in records.imported || u in records.excluded;
         const r = await listCandidates(session, host, isKnown);
+        // 取りこぼしの警告は、これまでに見た一覧（seen.json）と比べる
+        const seen = readJson<Candidate[]>('seen.json', []);
+        const warnings = listWarnings(seen, r.all);
+        const merged = new Map([...seen, ...r.all].map((g) => [g.uuid, g]));
+        writeJson('seen.json', [...merged.values()]);
         writeJson('candidates.json', r.candidates);
         console.log(`雀魂が返した件数: 四麻 ${r.returned['4p']}、三麻 ${r.returned['3p']}。未処理の候補: ${r.candidates.length}件`);
-        for (const w of r.warnings) console.log(`[警告] ${w}`);
+        for (const w of warnings) console.log(`[警告] ${w}`);
         printCandidates(r.candidates);
       } finally {
         session.close();

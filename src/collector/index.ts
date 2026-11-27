@@ -4,7 +4,7 @@ export {
   type CollectorDeps, type Session, type SessionState, type StateStore, type StateKey, type StaticSource,
 } from './session.ts';
 export {
-  listCandidates, fetchHeads, trimHead, gameLength,
+  listCandidates, listWarnings, fetchHeads, trimHead, gameLength,
   LIST_LIMIT, MAX_RECORDS_PER_RUN, DEFAULT_CHUNK_SIZE, COSMETIC_ACCOUNT_FIELDS,
   type Host, type Candidate, type CandidatePlayer, type CandidateList, type FetchResult,
 } from './collect.ts';

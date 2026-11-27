@@ -5,8 +5,6 @@ import type { Session } from './session.ts';
 
 /** `fetchAccountInfoExtra` が種類ごとに返す最大の件数 */
 export const LIST_LIMIT = 50;
-/** この件数以上なら、上限が近いと警告する */
-export const LIST_WARN_AT = 40;
 /** 1回の実行で取る牌譜の最大の件数 */
 export const MAX_RECORDS_PER_RUN = 100;
 /** `fetchGameRecordsDetail` に1回で渡す uuid の数。50件まで1回で返ることを確かめた（2026-11-19。それより多くは未確認） */
@@ -48,7 +46,6 @@ export interface CandidateList {
   all: Candidate[];
   /** 雀魂が返した件数（種類ごと） */
   returned: Record<Mode, number>;
-  warnings: string[];
 }
 
 /** 主催者の指定。表示用 ID（プロフィールに出る ID）か、内部 ID */
@@ -68,26 +65,44 @@ export async function listCandidates(session: Session, host: Host, isKnown: (uui
 
   const candidates: Candidate[] = [];
   const all: Candidate[] = [];
-  const warnings: string[] = [];
   const returned = { '4p': 0, '3p': 0 } as Record<Mode, number>;
   for (const { category, mode } of CATEGORIES) {
     const res = await session.call('Lobby.fetchAccountInfoExtra', { account_id: accountId, category, type: TYPE_FRIENDLY });
     const games = ((res.recent_games ?? []) as any[]).filter((g) => g.uuid).map((g) => toCandidate(g, mode));
     games.sort((a, b) => b.startTime - a.startTime);
     returned[mode] = games.length;
-    const label = mode === '4p' ? '四麻' : '三麻';
-    const oldest = games[games.length - 1];
-    if (games.length >= LIST_LIMIT && oldest && !isKnown(oldest.uuid)) {
-      warnings.push(`${label}: 一覧が上限の${LIST_LIMIT}件に達していて、一番古い対局も未処理。それより古い対局を取りこぼしたおそれがある`);
-    } else if (games.length >= LIST_WARN_AT) {
-      warnings.push(`${label}: 一覧が${games.length}件。上限の${LIST_LIMIT}件に近い。早めに取り込むか対象外にする`);
-    }
     all.push(...games);
     candidates.push(...games.filter((g) => !isKnown(g.uuid)));
   }
   candidates.sort((a, b) => b.startTime - a.startTime);
   all.sort((a, b) => b.startTime - a.startTime);
-  return { accountId, candidates, all, returned, warnings };
+  return { accountId, candidates, all, returned };
+}
+
+/**
+ * 取りこぼしの警告（タスク 032）。前回までに見た一覧（previous）と今回の一覧（current）を、四麻・三麻ごとに比べる。
+ * 一覧は新しい方から最大 LIST_LIMIT 件の続いた範囲なので、前回見た一番新しい対局が今回の一覧にあれば、その間に抜けは無い。
+ * 今回の一覧が上限に達していて、前回見た一番新しい対局が入っていなければ、その間の対局が一覧から外れて、もう取れないおそれがある。
+ * 取り込んだか（処理済みか）は見ない。主催者はリーグ以外の友人戦も打つので、未処理の対局が残るのはふつうのこと。
+ * 前回が無い（初めて）ときは、上限に達していれば、それより古い対局は取れないと知らせる
+ */
+export function listWarnings(previous: Candidate[], current: Candidate[]): string[] {
+  const warnings: string[] = [];
+  for (const { mode } of CATEGORIES) {
+    const label = mode === '4p' ? '四麻' : '三麻';
+    const now = current.filter((g) => g.mode === mode);
+    if (now.length < LIST_LIMIT) continue;
+    const before = previous.filter((g) => g.mode === mode);
+    if (before.length === 0) {
+      warnings.push(`${label}: 一覧が上限の${LIST_LIMIT}件に達している。これより古い対局は、この方法では取れない`);
+      continue;
+    }
+    const newest = before.reduce((a, b) => (b.startTime > a.startTime ? b : a));
+    if (!now.some((g) => g.uuid === newest.uuid)) {
+      warnings.push(`${label}: 前回の更新から一覧の上限（${LIST_LIMIT}件）を超えて対局があった。その間の対局は一覧から外れていて、取りこぼしたおそれがある`);
+    }
+  }
+  return warnings;
 }
 
 /**

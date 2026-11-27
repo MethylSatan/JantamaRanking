@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fetchHeads, gameLength, listCandidates, trimHead, MAX_RECORDS_PER_RUN } from './collect.ts';
+import { fetchHeads, gameLength, listCandidates, listWarnings, trimHead, LIST_LIMIT, MAX_RECORDS_PER_RUN, type Candidate } from './collect.ts';
 import type { Session } from './session.ts';
 
 function fakeSession(handler: (method: string, body: any) => any) {
@@ -39,23 +39,30 @@ test('四麻・三麻の友人戦を取り、既知の対局を除いて新し�
   assert.deepEqual(r.returned, { '4p': 3, '3p': 1 });
   assert.equal(r.candidates[0].startTime, 300_000);
   assert.deepEqual(r.candidates[0].players.map((p) => [p.seat, p.nickname, p.rank]), [[0, 'A', 2], [1, 'B', 1]]);
-  assert.deepEqual(r.warnings, []);
 });
 
-test('一覧が上限に近い・達したときに警告する', async () => {
-  const many = (n: number, prefix: string) => Array.from({ length: n }, (_, i) => game(`${prefix}${i}`, 1000 - i));
-  const run = (four: number, three: number, known: (u: string) => boolean) => {
-    const { session } = fakeSession((m, b) => (m === 'Lobby.searchAccountByEid' ? { account_id: 1 } : { recent_games: many(b.category === 1 ? four : three, `c${b.category}-`) }));
-    return listCandidates(session, { accountId: 1 }, known);
-  };
-  // 四麻: 50件で、一番古い（c1-49）が未処理 → 取りこぼしのおそれ。三麻: 40件 → 上限が近い
-  let r = await run(50, 40, () => false);
-  assert.equal(r.warnings.length, 2);
-  assert.match(r.warnings[0], /^四麻: .*取りこぼした/);
-  assert.match(r.warnings[1], /^三麻: .*近い/);
-  // 一番古い対局が処理済みなら、取りこぼしではなく「近い」の警告
-  r = await run(50, 39, (u) => u === 'c1-49');
-  assert.deepEqual(r.warnings.map((w) => /近い/.test(w)), [true]);
+test('取りこぼしの警告は、前回見た一番新しい対局が今回の一覧にあるかで決める（処理済みかは見ない）', () => {
+  /** 開始時刻 from から1ずつ新しい対局を n 件。新しい順 */
+  const span = (mode: '4p' | '3p', from: number, n: number): Candidate[] =>
+    Array.from({ length: n }, (_, i) => ({
+      uuid: `${mode}-${from + i}`, startTime: from + i, endTime: from + i, mode, tag: 2, subTag: 1, players: [],
+    })).reverse();
+
+  // 上限に達していても、前回見た一番新しい対局（4p-60）が入っていれば、抜けは無い
+  assert.deepEqual(listWarnings(span('4p', 0, 61), span('4p', 30, LIST_LIMIT)), []);
+  // 前回の一番新しい対局（4p-60）より後に上限を超えて増えた → 取りこぼし
+  const w = listWarnings(span('4p', 0, 61), span('4p', 70, LIST_LIMIT));
+  assert.equal(w.length, 1);
+  assert.match(w[0], /^四麻: .*取りこぼした/);
+  // 上限に達していなければ、重ならなくても警告しない（一覧から押し出されていない）
+  assert.deepEqual(listWarnings(span('4p', 0, 10), span('4p', 70, LIST_LIMIT - 1)), []);
+  // 初めて（前回が無い）で上限に達していれば、それより古い対局は取れないと知らせる
+  assert.match(listWarnings([], span('3p', 0, LIST_LIMIT))[0]!, /^三麻: .*取れない/);
+  // 四麻・三麻は別に見る（三麻の前回だけあっても、四麻は初めて扱い）
+  assert.deepEqual(
+    listWarnings(span('3p', 0, 5), [...span('4p', 0, LIST_LIMIT), ...span('3p', 0, 5)]).map((x) => x.slice(0, 3)),
+    ['四麻:'],
+  );
 });
 
 test('表示用 ID が見つからなければ例外', async () => {
