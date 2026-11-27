@@ -1,6 +1,6 @@
-# 023 主催者への開放（Host の付け外しと許可の一覧）
+# 023 主催者への開放（申請と承認、Host の付け外し、利用者の削除）
 
-状態: todo / 依存: 013、022
+状態: doing / 依存: 013、022
 
 ## 目的
 主催者（Host）に開放するときに、Host が画面で自分のランキングを操作でき、Admin が画面で Host を付け外しできるようにする。利用者が増える見込みは高くないので、開放すると決めたときに着手する（2026-11-25 ユーザーの判断）。
@@ -25,3 +25,10 @@
 
 ## メモ
 - タスク 024 からの申し送り: 利用者の情報（`USER#<sub>` / `PROFILE`。Discord の ID・表示名）はまだ書いていない。アクセストークンには Discord の ID・名前が無いので、書くなら ID トークンを API に送ってもらうか、Cognito の `AdminGetUser` で引く（`docs/decisions.md` 2026-11-25 タスク 024）。Host の付け外しの API も無い（Host の項目を読む道は `src/api/authorize.ts` にある）
+- 2026-11-27 の作業（決定は `docs/decisions.md` 2026-11-27 タスク 023）
+  - 雀魂の規約の本文を Playwright で読み、判断をやり直した（`docs/local/008-terms-notes.md`）。グレーと理解したうえで進める（ユーザーの判断）
+  - 登録は「誰でもログイン → 本人が申請 → Admin が承認」。SSM の許可の一覧はやめ、pre sign-up は人数（50人）だけを見る
+  - API: `PUT /api/me/profile`・`DELETE /api/me`・`GET /api/users`・`POST /api/users/{sub}/approve`・`DELETE /api/users/{sub}`・`GET|PUT|DELETE /api/rankings/{id}/hosts[/{sub}]`。Cognito は `src/api/directory.ts`（本番は `src/api/aws.ts` の `CognitoDirectory`）
+  - 画面: 申請（`web/src/Apply.tsx`）、利用者（`web/src/UserList.tsx`、`#/users`）、ランキングの設定の「主催者」の欄、一覧の雀魂アカウント32件以上の印
+  - テスト: `src/api/users.test.ts`（付いていないランキングのすべての経路で 404 を含む）
+  - 初めての候補の更新の間隔は、タスク 033 に分けた
