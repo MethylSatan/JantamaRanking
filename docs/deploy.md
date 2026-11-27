@@ -1,6 +1,6 @@
 # 配信とデプロイ
 
-URL: `https://jantama-ranking.methylsatan.com`（名前の経緯は `docs/decisions.md` 2026-11-20 タスク 010）
+URL: `https://jantama-ranking.methylsatan.com`（名前の経緯は `docs/decisions.md` 2026-11-20「AWS 基盤」）
 
 ## 構成
 ```
@@ -15,11 +15,11 @@ GitHub (master へ push)
 Lambda → S3 jantama-ranking-data-<account>（牌譜の json、雀魂のバージョンと定義）
        → DynamoDB jantama-ranking
        → SSM Parameter Store /jantama-ranking/*（認証情報・定義の鍵。値は手で入れる）
-EventBridge Scheduler jantama-ranking-daily → Lambda（1日1回。有効にしないと決めた（タスク 028）。DISABLED）
+EventBridge Scheduler jantama-ranking-daily → Lambda（1日1回。有効にしないと決めた。DISABLED）
 Cognito ユーザープール jantama-ranking（Lite プラン。ログインは Discord だけ。自己登録なし）
   ├ ログイン画面（Hosted UI）: jantama-ranking-auth.methylsatan.com（Cognito が立てる CloudFront。Route 53 の ALIAS）
   ├ IdP: Discord（OIDC）
-  └ pre sign-up: Lambda jantama-ranking-presignup（Discord からのログインなら利用者を作る。50人に達したら断る。タスク 023）
+  └ pre sign-up: Lambda jantama-ranking-presignup（Discord からのログインなら利用者を作る。50人に達したら断る）
 ```
 - コードは `infra/`（Terraform）。状態は S3 の `methylsatan-tfstate`（word-flashcard と共有。キーは `jantama-ranking/terraform.tfstate`）
 - リージョンは `ap-northeast-1`。WAF だけ CloudFront の都合で `us-east-1`
@@ -31,7 +31,7 @@ Cognito ユーザープール jantama-ranking（Lite プラン。ログインは
 - 画面の各ページ（`web/public/index.html`・`web/admin.html` など）の `robots` メタ、`web/public/robots.txt`（全拒否）、CloudFront Functions（`jantama-ranking-noindex`）が画面にも API にも付ける応答ヘッダー `X-Robots-Tag: noindex, nofollow, noarchive`
 - 証明書はワイルドカード（word-flashcard のもの）なので、CT ログにサブドメイン名は載らない
 
-## API と OAC（タスク 024〜027 で気をつけること）
+## API と OAC
 - Function URL は IAM 認証で、CloudFront の OAC（配信元の種類 `lambda`）だけが署名して呼べる。直接の要求は 403
 - CloudFront から呼ぶには、Lambda に `lambda:InvokeFunctionUrl` と `lambda:InvokeFunction`（`invoked_via_function_url = true`）の両方の許可が要る（`infra/api.tf`）
 - **OAC は署名のとき `Authorization` ヘッダーを上書きする。** Cognito の JWT は別の名前のヘッダーで送る
@@ -52,7 +52,7 @@ Cognito ユーザープール jantama-ranking（Lite プラン。ログインは
 | S3（2バケット、バージョニング） | $0.025/GB月 | 牌譜は年500局で約1MB。1円未満 |
 | CloudWatch Logs（Lambda のログ。30日で削除） | 取り込み $0.76/GB | 1円未満 |
 | EventBridge Scheduler | 月1,400万回まで無料 | $0 |
-| Cognito（Lite） | Admin・Host の数人。Discord からの OIDC 連携は月50 MAU まで無料、超えると $0.015/MAU（2026-11-20、タスク 014 で料金ページの要約を確認） | 無料枠の範囲 |
+| Cognito（Lite） | Admin・Host の数人。Discord からの OIDC 連携は月50 MAU まで無料、超えると $0.015/MAU（2026-11-20） | 無料枠の範囲 |
 | SSM Parameter Store（標準） | 無料 | $0 |
 
 合計の見込みは月数円以内。定価で見積もっても1円台〜数円で、Lambda・CloudWatch Logs などの恒常の無料枠に収まれば $0。
@@ -67,7 +67,7 @@ Cognito ユーザープール jantama-ranking（Lite プラン。ログインは
 ## 初回の構築手順
 前提: `terraform`（1.10 以上）と `aws` CLI v2 を入れ、`aws login` でログインしておく。AWS 側は管理者相当の権限が要る。状態用バケット・Route 53 のゾーン・証明書・OIDC プロバイダーは、word-flashcard の手順で作り済みであること。
 1. Discord の開発者ポータル（https://discord.com/developers/applications）で Application を作る。OAuth2 の画面で Client ID を控え（`infra/variables.tf` の既定値にする）、Client Secret を発行して SSM に入れる（下の「Discord の Client Secret」。リポジトリにも `docs/local/` にも書かない）。Public Client はオフのまま。Redirects に `https://jantama-ranking-auth.methylsatan.com/oauth2/idpresponse` を足す。Bot・Installation・OAuth2 URL Generator は使わない
-2. （欠番。以前は許可の一覧を SSM に作っていた。タスク 023 でやめた）
+2. （欠番。以前は許可の一覧を SSM に作っていた）
 3. `cd infra && terraform init && terraform apply`。定額プランへの加入も含まれる（`plan.tf`）。`terraform state show aws_pricingplanmanager_subscription.site` で `status = ACTIVE`、`plan_tier = FREE` を確認する
 4. GitHub のシークレットを設定する。値は秘密情報ではないが、公開リポジトリでは Actions のログを誰でも見られるので、アカウント ID がログに出ないようシークレットにする（word-flashcard は非公開なので変数）
    ```
@@ -95,7 +95,7 @@ rm -rf $t
 - 雀魂のバージョンと定義は、Lambda が data バケットの `state/` に置く。無いとき・`oauth2Auth` が `err=151` のときに静的ファイルから作り直す（入れる必要はない）
 
 ### Discord の Client Secret
-**tfstate に入れない。** secret が漏れると、アプリの持ち主（Admin）の Discord アカウントのトークンを、`client_credentials` で取られうる（`docs/decisions.md` 2026-11-23 タスク 020）。
+**tfstate に入れない。** secret が漏れると、アプリの持ち主（Admin）の Discord アカウントのトークンを、`client_credentials` で取られうる（`docs/decisions.md` 2026-11-23「Discord ログインの接続」）。
 - secret は SSM の SecureString `/jantama-ranking/discord-client-secret` に手で入れる。シェルの履歴に残さないよう、`read -s` で入れる
   ```
   read -rs SECRET && aws ssm put-parameter --name /jantama-ranking/discord-client-secret --type SecureString --value "$SECRET" --overwrite; unset SECRET
@@ -105,10 +105,10 @@ rm -rf $t
 - Client ID は秘密ではないので、`infra/variables.tf` の既定値に置いている
 
 ### ログインの許可
-- Discord を持つ人なら誰でもログインでき、ログインすると申請の画面になる。管理人が画面の「利用者」（`#/users`）で承認・却下し、ランキングの設定で主催者に付ける（タスク 023）
+- Discord を持つ人なら誰でもログインでき、ログインすると申請の画面になる。管理人が画面の「利用者」（`#/users`）で承認・却下し、ランキングの設定で主催者に付ける
 - 利用者は50人まで（Cognito の Discord 連携の無料の範囲。`infra/presignup.tf` の `max_users`）。50人いると、新しい人の初回のログインを pre sign-up が断る
 - 自分の Discord の ID は、Discord の設定で開発者モードをオンにし、自分のアイコンの右クリック →「ユーザー ID をコピー」で得る（利用者の画面に出る Discord ID と見比べるとき）
-- 初回のログインで利用者ができたら、Admin にする人をグループに入れる。利用者名は `Discord_<Discord の ID>` の形（タスク 020 で確認）
+- 初回のログインで利用者ができたら、Admin にする人をグループに入れる。利用者名は `Discord_<Discord の ID>` の形
   ```
   aws cognito-idp admin-add-user-to-group --user-pool-id $(terraform -chdir=infra output -raw user_pool_id) --username <利用者名> --group-name admins
   ```
@@ -128,11 +128,11 @@ aws cloudfront create-invalidation --distribution-id $(terraform -chdir=infra ou
 ```
 - sync は `rankings/*` を除外する（Lambda が書くランキングの JSON を消さない）
 
-## 手元の開発（画面。タスク 026）
+## 手元の開発（画面）
 - `npm run dev` で Vite を立てる（`http://localhost:5173/admin.html`、閲覧は `http://localhost:5173/ranking.html?id=<公開 ID>`）。`/api` と `/rankings` は Vite の proxy で本番（`jantama-ranking.methylsatan.com`）へ送るので、**手元でも本番の API・DynamoDB・雀魂への接続を使う**。確かめるときはテスト用のランキングを作り、最後に削除（非公開）にする
 - Cognito のコールバックに `http://localhost:5173/admin.html` を登録してある（`infra/auth.tf`）。ポートは固定（`strictPort`）
 - ビルドは `npm run build:web`（出力は `dist/web/`。`web/public/` の静的ファイルもそのまま入る）
-- 2026-11-25（タスク 027）: 起動中にファイルを変えても、画面が古いまま（Vite が変更を拾わない）ことが2回あった。おかしいときは `npm run dev` を起動し直す
+- 2026-11-25: 起動中にファイルを変えても、画面が古いまま（Vite が変更を拾わない）ことが2回あった。おかしいときは `npm run dev` を起動し直す
 - 閲覧の画面は、本番に公開中のランキングが無ければ、Playwright の `page.route` で `/rankings/*.json` を架空の対局（`src/ranking/testdata.ts` の `game`）に差し替えて確かめる
 
 ## 確認
@@ -140,9 +140,9 @@ aws cloudfront create-invalidation --distribution-id $(terraform -chdir=infra ou
 - `curl -s https://jantama-ranking.methylsatan.com/api/health`（`{"ok":true}`）
 - Function URL に直接要求すると 403（`aws lambda get-function-url-config --function-name jantama-ranking-api` で URL を出す）
 - API の中身（Admin のトークンで）: `npm run apicheck -- smoke`。テスト用のランキングを作り、操作して、最後に削除（非公開）にする。任意の要求は `npm run apicheck -- call GET /api/me`
-- 候補の更新から取り込みまで（タスク 025）: `npm run apicheck -- flow <表示用ID> [取り込む件数]`。テスト用のランキングに雀魂アカウントを指定し、候補の更新 → 取り込み → 公開の URL のランキングの JSON → 対象外・戻す → 作り直し → 公開 ID の取り直しを確かめ、最後に削除（非公開）にする。**雀魂へのログインが2回起きる**（候補の更新と取り込み）。牌譜は S3 の `records/` に残る
+- 候補の更新から取り込みまで: `npm run apicheck -- flow <表示用ID> [取り込む件数]`。テスト用のランキングに雀魂アカウントを指定し、候補の更新 → 取り込み → 公開の URL のランキングの JSON → 対象外・戻す → 作り直し → 公開 ID の取り直しを確かめ、最後に削除（非公開）にする。**雀魂へのログインが2回起きる**（候補の更新と取り込み）。牌譜は S3 の `records/` に残る
   - トークンは `local/apicheck/tokens.json`（Cognito のリフレッシュトークン。既定で30日）。無い・切れたときは `npm run apicheck -- login`: Playwright がブラウザを開くので、Discord のログインだけ手で行う（入力は自動化しない。Discord の規約と CAPTCHA のため）。ブラウザのプロファイルも `local/apicheck/profile` に残す
-  - 管理の画面での同じ流れの確認（タスク 026）は、Playwright で `npm run dev` の画面を開いて行った。`local/apicheck/tokens.json` のリフレッシュトークンを画面の sessionStorage（`tokens`）に入れると、画面がアクセストークンを取り直すので、Discord の入力は要らない
+  - 管理の画面での同じ流れの確認は、Playwright で `npm run dev` の画面を開いて行った。`local/apicheck/tokens.json` のリフレッシュトークンを画面の sessionStorage（`tokens`）に入れると、画面がアクセストークンを取り直すので、Discord の入力は要らない
   - Admin でない利用者での確認（403・404）は、Discord のアカウントが1つなので本番ではできない。自動テスト（`src/api/*.test.ts`）で確かめる
 
 ## 注意・メモ
@@ -151,5 +151,5 @@ aws cloudfront create-invalidation --distribution-id $(terraform -chdir=infra ou
 - DynamoDB のテーブルと Cognito のユーザープールは削除保護を有効にしている。消すときは先に外す
 - 画面用のバケットもバージョニングを有効にしている（ランキングの JSON の過去の版を残すため）。sync のたびに古い版が残るが、量は小さい
 - Lambda の環境変数: `DATA_BUCKET`、`SITE_BUCKET`（ランキングの JSON の置き場）、`TABLE_NAME`、`SSM_PREFIX`（`/jantama-ranking/`）、`USER_POOL_ID`・`USER_POOL_CLIENT_ID`（アクセストークンの検証）
-- Lambda の権限（タスク 025 で追加）: 自分の `lambda:InvokeFunction`（ジョブを非同期で起動する）、site バケットの `rankings/*` の `s3:DeleteObject`（公開 ID の取り直し・削除で古い JSON を消す）。タスク 023 で、ユーザープールの `ListUsers`・`ListUsersInGroup`・`AdminUserGlobalSignOut`・`AdminDeleteUser`（利用者の一覧と削除）。pre sign-up は `ListUsers`（人数を数える）
-- **`methylsatan.com`（apex）の A レコードはこのリポジトリで作っている**（`infra/shared.tf`。値は到達しない文書用のアドレス `192.0.2.1`）。Cognito の独自ドメインが、親ドメインに A レコードがあることを求めるため。ゾーンは共有のリソースなので、ほかのリポジトリでは apex の A レコードを作らない（2026-11-23、タスク 020）
+- Lambda の権限: 自分の `lambda:InvokeFunction`（ジョブを非同期で起動する）、site バケットの `rankings/*` の `s3:DeleteObject`（公開 ID の取り直し・削除で古い JSON を消す）。ユーザープールの `ListUsers`・`ListUsersInGroup`・`AdminUserGlobalSignOut`・`AdminDeleteUser`（利用者の一覧と削除）。pre sign-up は `ListUsers`（人数を数える）
+- **`methylsatan.com`（apex）の A レコードはこのリポジトリで作っている**（`infra/shared.tf`。値は到達しない文書用のアドレス `192.0.2.1`）。Cognito の独自ドメインが、親ドメインに A レコードがあることを求めるため。ゾーンは共有のリソースなので、ほかのリポジトリでは apex の A レコードを作らない（2026-11-23）

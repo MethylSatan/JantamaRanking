@@ -5,7 +5,7 @@ Vtuber の東風乃ちのさんのメン限友人戦向けに作ったもの。2
 
 ## 主要な制約
 - 牌譜の取得は雀魂のログイン済みセッションに依存する（Tampermonkey、または `PaifuImporter` の WebSocket 接続）。雀魂側の仕様変更で壊れうる
-- 集計は Web サービスの中で行い、ランキングは Web ページで見せる。Google スプレッドシートと GAS（Google Apps Script）はやめる（`docs/decisions.md` 2026-11-19）。旧方式の利点（作り直せる、誤りを戻せる、自由に並べ替えられる）は非機能要件として引き継ぐ（`docs/product.md`）
+- 集計は Web サービスの中で行い、ランキングは Web ページで見せる。Google スプレッドシートと GAS（Google Apps Script）はやめる（`docs/decisions.md` 2026-11-19「Web サービスの構成」）。旧方式の利点（作り直せる、誤りを戻せる、自由に並べ替えられる）は非機能要件として引き継ぐ（`docs/product.md`）
 - 旧スプレッドシートは、移行が済むまで変更しない（場所は `docs/local/003-sheet-notes.md`）
 - アクセストークンと牌譜データは公開リポジトリに載せない（`env.js`、`input/`、`output/` は gitignore 済み）
 - 利用者は個人・小規模コミュニティで、エンジニアではない想定。商用サービスではない
@@ -20,9 +20,9 @@ Vtuber の東風乃ちのさんのメン限友人戦向けに作ったもの。2
 - `npm run build:api`: Lambda 用に `src/api/handler.ts` を `dist/api/index.mjs` にまとめる（esbuild）
 - `npm run apicheck -- smoke`: 本番の API を Admin のトークンで確かめる（`login` / `smoke` / `call`。`docs/deploy.md`「確認」）
 - `node src/collector/cli.ts <コマンド>`: 牌譜回収を手元で試す（`candidates` / `fetch` / `exclude` / `update-static`）。状態は `local/collector/`。手順は `docs/collector.md`
-- `node src/migrate/legacy.ts <fetch|compare|upload>`: 旧方式の牌譜の移行（タスク 015 で実施済み。一度きり）。入出力は `local/legacy/`
+- `node src/migrate/legacy.ts <fetch|compare|upload>`: 旧方式の牌譜の移行（実施済み。一度きり）。入出力は `local/legacy/`
 
-`PaifuImporter/` で実行する（Node.js。バージョンは未確認、タスク001で確認する）。
+`PaifuImporter/` で実行する（Node.js。バージョンは未確認）。
 - `npm install`: 依存を入れる
 - `node getPaifu.js`: `input/` の牌譜URL一覧を読み、牌譜 json を `output/` に書き出す
   - `env.js`（`URL_BASE` / `ACCESS_TOKEN` / `PREFERRED_SERVER` / `OAUTH_TYPE` をエクスポート）が必要。gitignore 済みなので手元で作る
@@ -55,6 +55,7 @@ Tampermonkey スクリプトは `Tampermonkey/` にある。ブラウザの拡�
 
 ## 規約
 - 文書は日本語。コード識別子は英語
+- 設計文書（`docs/product.md`・`architecture.md`・`deploy.md`・`collector.md`）と `CLAUDE.md` は今の姿を書き、タスク番号を書かない。どのタスクで決めた・作ったかは、`docs/decisions.md`（見出しにタスク番号）とタスクファイルに書く。決定ログを指すときは日付と見出しの題名で指す（例: `docs/decisions.md` 2026-11-25「権限の設計」）。まだ終わっていない作業を指すときだけ、タスク番号を書いてよい
 - コミットメッセージは英語で短く
 - `env.js`、トークン、牌譜データ（`input/` `output/`）はコミットしない
 - 公開リポジトリなので、機微な内容は `docs/local/` に書く。対象は、規約などについての判断、検証に使ったアカウント、個人の対局の具体（日時・件数・ニックネーム）。公開側の文書には、API の仕様や設計の要旨だけを書き、必要なら `docs/local/` を指す
