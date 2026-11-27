@@ -17,4 +17,4 @@
 
 ## メモ
 - 2026-11-27: `docs/architecture.md` の冒頭に「全体像」の節を作り、Web サービスの構成を Mermaid で描いた（利用者・CloudFront・S3・Lambda・DynamoDB・SSM・Cognito・Discord・雀魂）。`architecture.png` は消した（git の履歴に残る）。`CLAUDE.md` の文書の地図も合わせた
-- 描画の確認（Mermaid を CDN から読んで Playwright で描く）は自動の許可判定で止められたため、push 後に GitHub の表示で確かめる
+- 描画は、push 後に GitHub の blob のページを Playwright で開いて確かめた（`viewscreen.githubusercontent.com` の iframe に描かれる）。push の直後の2回は、GitHub がエラーページ（Unicorn。5xx）を返したが、同じスクリプトで少しあとに開くと 200 で描画された。githubstatus に該当する障害は無く、GitHub 側の一時的な失敗とみる
