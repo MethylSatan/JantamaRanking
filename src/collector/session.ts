@@ -1,5 +1,5 @@
 // ログイン済みの接続を開く。雀魂のバージョンと liqi の定義は保存済みのものを使い、
-// `oauth2Auth` が `err=151` のときだけ作り直して、ログインを1回だけやり直す（docs/decisions.md 2026-11-19 タスク 016・017）。
+// `oauth2Auth` が `err=151` のときだけ作り直して、ログインを1回だけやり直す（docs/decisions.md 2026-11-19「雀魂のバージョンへの追従」「liqi の定義への追従」）。
 import { isDeepStrictEqual } from 'node:util';
 import type protobuf from 'protobufjs';
 import { connect as wsConnect, GATEWAY_URL, MajsoulError, type Conn, type Connect, type Log } from './connection.ts';

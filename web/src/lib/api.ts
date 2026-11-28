@@ -12,7 +12,7 @@ export type Role = 'admin' | 'host';
 export type Permissions = typeof PERMISSIONS;
 export type Operation = keyof Permissions;
 
-/** 本人の申請（タスク 023）。申請していなければ無い */
+/** 本人の申請。申請していなければ無い */
 export interface MyProfile {
   name: string;
   note: string;

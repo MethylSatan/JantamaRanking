@@ -42,7 +42,7 @@
 - ユーザーの判断で、いったん止める。L2 の調査は、後でタスク 007 として続ける（`docs/decisions.md` 2026-11-16）
 
 ### 2026-11-19 実装と実地確認
-- `src/collector/` に、Lambda から呼ぶ部品と手元の CLI を作った。構成は `docs/architecture.md`「牌譜回収（タスク 006）」、使い方は `docs/collector.md`、決定は `docs/decisions.md` 2026-11-19（タスク 006）
+- `src/collector/` に、Lambda から呼ぶ部品と手元の CLI を作った。構成は `docs/architecture.md`「牌譜回収」、使い方は `docs/collector.md`、決定は `docs/decisions.md` 2026-11-19（タスク 006）
 - 試作（`local/probe/`）の処理を移した。定義の生成は、手元の Lua・キャッシュのバンドルから試作と同じ定義になることを確かめた。送る `requestConnection` は、記録した要求とバイト単位で一致した
 - 集計の側に `fromRecordGame`（`src/ranking/record.ts`）を足した。テストは合成データだけで、45件（`npm test`）
 - 実地確認（ユーザーの許可を得た）: 静的ファイル5回、ログイン3回、一覧2回、牌譜2回。主催者の友人戦の候補が出て、10件・50件をそれぞれ1回の要求で取れた。主催者は、表示用 ID が手元に無かったので、記録済みの一覧から内部 ID を使った。具体は `docs/local/006-collector-notes.md`

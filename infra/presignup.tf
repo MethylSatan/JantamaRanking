@@ -1,5 +1,5 @@
 # Cognito の pre sign-up トリガー（lambda/presignup/index.mjs）。Discord からのログインなら誰でも利用者を作るが、
-# 人数が Cognito の無料の範囲（50人）を超えたら断る。承認は画面で管理人が行う（タスク 023）。
+# 人数が Cognito の無料の範囲（50人）を超えたら断る。承認は画面で管理人が行う。
 # コードが小さく、変更も少ないので、API の Lambda と違って Terraform が載せる（GitHub Actions のデプロイの対象外）
 locals {
   max_users = 50

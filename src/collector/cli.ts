@@ -1,4 +1,4 @@
-// 牌譜回収を手元から試す CLI（タスク 006）。手順は docs/collector.md。
+// 牌譜回収を手元から試す CLI。手順は docs/collector.md。
 // 状態はすべて local/collector/（gitignore 済み）に置く。場所は環境変数 COLLECTOR_DIR で変えられる。
 import fs from 'node:fs';
 import path from 'node:path';

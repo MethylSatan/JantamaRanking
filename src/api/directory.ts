@@ -1,4 +1,4 @@
-// Cognito の利用者（タスク 023）。誰でも Discord でログインでき、利用者の一覧は Cognito を元にする
+// Cognito の利用者。誰でも Discord でログインでき、利用者の一覧は Cognito を元にする
 // （ログインしただけで申請していない人も、管理人に見えて消せるように）。本番は aws.ts の CognitoDirectory。
 
 /** Cognito の利用者 */

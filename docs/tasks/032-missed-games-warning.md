@@ -6,7 +6,7 @@
 候補の更新の警告（`src/collector/collect.ts` の `listCandidates`）は、一覧が40件以上なら「上限が近い」、50件ちょうどで一番古い対局が未処理（取り込み済みでも対象外でもない）なら「取りこぼしたおそれ」と出す。これは、一覧に出る対局をすべて取り込むか対象外にする前提になっている。主催者はリーグ以外の友人戦も打つので、未処理の対局が残るのはふつうで、警告がいつも出て意味がない（ユーザーの指摘、2026-11-27 タスク 030）。本当に取りこぼした（一覧から外れて、もう取れない対局がある）ときだけ知らせるようにする。
 
 ## 読むべき資料
-- `docs/architecture.md`「牌譜回収（タスク 006）」「取り込みの手順」
+- `docs/architecture.md`「牌譜回収」「取り込みの手順」
 - `src/collector/collect.ts`（`listCandidates`・`LIST_WARN_AT`）、`src/api/jobs.ts`（`refreshRanking`・`refreshAll`）
 
 ## 作業範囲

@@ -1,4 +1,4 @@
-// 権限の判断を1か所にまとめる（docs/architecture.md「権限（タスク 022）」）。
+// 権限の判断を1か所にまとめる（docs/architecture.md「権限」）。
 // 操作と、それを許す役割の表は、文書の「操作ごとの許可」と同じ形にする。画面はこの表を GET /api/me で受け取る。
 
 import { HttpError } from './errors.ts';

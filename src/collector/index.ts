@@ -1,4 +1,4 @@
-// 牌譜回収の部品（タスク 006）。Web サービスの Lambda から呼ぶ（組み込みはタスク 013）。
+// 牌譜回収の部品。Web サービスの Lambda から呼ぶ（組み込みは src/api/aws.ts）。
 export {
   openSession, refreshState, loadState,
   type CollectorDeps, type Session, type SessionState, type StateStore, type StateKey, type StaticSource,

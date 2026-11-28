@@ -1,5 +1,5 @@
 // 雀魂の WebGL 版の公開の静的ファイルを取る（ログインしない）。
-// 雀魂のバージョン（タスク 016）と、liqi の定義の元になるバンドル（タスク 017）。手順は docs/architecture.md「雀魂の WebGL 版の通信」。
+// 雀魂のバージョンと、liqi の定義の元になるバンドル。手順は docs/architecture.md「雀魂の WebGL 版の通信」。
 import { randomBytes } from 'node:crypto';
 import { createPacer, defaultSleep, DEFAULT_INTERVAL_MS, type Sleep } from './pacer.ts';
 import { bundleOf, readBundleInfo, unityfs, type BundleInfo } from './unityfs.ts';

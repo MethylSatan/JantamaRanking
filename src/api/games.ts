@@ -53,7 +53,7 @@ export async function mergedCandidates(store: Store, rankingId: string): Promise
   return [...byUuid.values()].sort((a, b) => b.startTime - a.startTime || (a.uuid < b.uuid ? -1 : 1));
 }
 
-/** ランキングの対局（取り込み済み・対象外の結果と、候補）に出てくる参加者。雀魂アカウントを選んで指定するのに使う（タスク 031） */
+/** ランキングの対局（取り込み済み・対象外の結果と、候補）に出てくる参加者。雀魂アカウントを選んで指定するのに使う */
 export interface RankingPlayer {
   internalId: string;
   /** 一番新しい対局での名前 */

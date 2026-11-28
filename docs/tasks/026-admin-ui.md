@@ -7,7 +7,7 @@ Admin（当面）が画面だけで、ランキングを作り、雀魂アカウ
 
 ## 読むべき資料
 - `docs/product.md`（利用者と操作、非機能要件）
-- `docs/architecture.md`「API」「非同期の処理」「権限（タスク 022）」
+- `docs/architecture.md`「API」「非同期の処理」「権限」
 - `docs/deploy.md`「API と OAC」
 - `web/public/admin.html`（仮の実装。ログインの流れ。026 で `web/admin.html` と `web/src/` に置き換えた）
 - `docs/tasks/013-web-ui.md` のメモ（タスク 020 からの申し送り、基盤にあるもの）

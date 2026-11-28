@@ -1,4 +1,4 @@
-// 申請・利用者・Host の付け外し（タスク 023）と、Host が付いていないランキングに触れないこと（完了条件）。
+// 申請・利用者・Host の付け外しと、Host が付いていないランキングに触れないこと（完了条件）。
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

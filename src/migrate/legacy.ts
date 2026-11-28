@@ -1,4 +1,4 @@
-// 旧方式（Drive → GAS → スプレッドシート）の牌譜を Web サービスに移す（タスク 015）。
+// 旧方式（Drive → GAS → スプレッドシート）の牌譜を Web サービスに移す。
 // 旧方式の牌譜（mjlog 形式）にはアカウント ID が無いので、`ref`（牌譜 uuid）で雀魂から head を取り直し、
 // 新方式と同じ形（data バケットの records/<uuid>.json と、ランキングの「取り込み済み」）で入れる。
 // 入出力は local/legacy/（gitignore 済み）。手順と結果の要旨は docs/tasks/015-legacy-data-migration.md。

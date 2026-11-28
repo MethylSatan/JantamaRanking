@@ -682,7 +682,7 @@ function SettingsTab(s: Shared) {
   );
 }
 
-/** 主催者（Host）の付け外し。管理人だけ（タスク 023）。付けられるのは「利用者」で承認した人 */
+/** 主催者（Host）の付け外し。管理人だけ。付けられるのは「利用者」で承認した人 */
 function HostsCard(s: Shared) {
   const { ranking } = s;
   const [hosts, setHosts] = useState<HostView[] | null>(null);

@@ -1,4 +1,4 @@
-// 手元から雀魂に接続するときの依存（タスク 006 の CLI、タスク 015 の移行のスクリプト）。
+// 手元から雀魂に接続するときの依存（手元で試す CLI と、旧方式の牌譜の移行のスクリプト）。
 // 雀魂のバージョン・定義・認証情報・定義の鍵は、すべて dir（既定は local/collector/。gitignore 済み）に置く。手順は docs/collector.md。
 import fs from 'node:fs';
 import path from 'node:path';

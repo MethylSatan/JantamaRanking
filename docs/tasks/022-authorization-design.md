@@ -30,7 +30,7 @@
 ## メモ
 - 2026-11-23 に、タスク 021（主催者の本人確認と権限）の権限の部分を、ユーザーの指示で独立した設計タスクにした
 - タスク 020 で分かったこと: 運営の判定は `cognito:groups` の `operators` の有無。連携の利用者は自動のグループ（`<ユーザープール ID>_Discord`）にも入る。許可していない Discord の ID では、pre sign-up が利用者を作らせない（SSM `/jantama-ranking/allowed-discord-ids`）
-- 2026-11-25: 完了。設計は `docs/architecture.md`「権限（タスク 022）」、決定は `docs/decisions.md` 2026-11-25（タスク 022）
+- 2026-11-25: 完了。設計は `docs/architecture.md`「権限」、決定は `docs/decisions.md` 2026-11-25（タスク 022）
 - ユーザーの判断: 用語を Admin / Host（主催者）/ Viewer（閲覧者）にし、「運営」は Admin、「運営アカウント」はシステム用の雀魂アカウントと呼ぶ。Cognito のグループは `admins` に改名する。ランキングの作成は Admin だけ。ログインできる人を増やす手段は、当面いまの方式（Admin が許可の一覧に足す）
 - 途中の案: ランキングごとに主催者（Owner）と共同の管理者（Editor）を分ける案、名前を Owner・Manager にする案を検討した。役割は Host の1つにまとめた（業務アプリの名前は利用者に違和感がある、分けても手間が減らない）
 - 用語の置き換えは、生きている文書（product・architecture・deploy・collector、未完了のタスク、`docs/local/`）とコードのコメント・画面に行った。完了したタスクのファイルと、決定ログの過去の行は、記録なのでそのまま

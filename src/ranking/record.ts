@@ -1,4 +1,4 @@
-// 新方式の牌譜（雀魂の `RecordGame`。タスク 006 の回収で保存する head）から、対局の結果を取り出す。
+// 新方式の牌譜（雀魂の `RecordGame`。牌譜回収で保存する head）から、対局の結果を取り出す。
 // protobufjs の toObject（defaults: false）の形なので、0 や空の項目は無いことがある。
 import type { GameResult, Mode, PlayerResult } from './types.ts';
 import { rankPlayers } from './rank.ts';

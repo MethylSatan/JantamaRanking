@@ -159,7 +159,7 @@ async function refreshRanking(
     await getSession();
   }
   for (const a of accounts) {
-    // 表示用 ID は、内部 ID を引くためだけに使う。進み具合・結果・操作ログには出さない（タスク 031）
+    // 表示用 ID は、内部 ID を引くためだけに使う。進み具合・結果・操作ログには出さない
     const label = a.name ?? (a.internalId ? `ID ${a.internalId}` : '表示用 ID で指定したアカウント');
     await progress(`雀魂アカウント ${label} の一覧を取っています`);
     const host: Host = a.internalId ? { accountId: Number(a.internalId) } : { eid: Number(a.displayId) };

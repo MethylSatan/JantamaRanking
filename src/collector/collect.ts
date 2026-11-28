@@ -1,4 +1,4 @@
-// 主催者の友人戦の候補を出し、選んだ対局の牌譜（head）を取る（タスク 006）。
+// 主催者の友人戦の候補を出し、選んだ対局の牌譜（head）を取る。
 // 取り込み済み・対象外の記録は呼び出し側が持つ（Web サービスでは DynamoDB、CLI ではファイル）。
 import type { Mode } from '../ranking/types.ts';
 import type { Session } from './session.ts';
@@ -59,7 +59,7 @@ export async function listCandidates(session: Session, host: Host, isKnown: (uui
   } else {
     const found = await session.call('Lobby.searchAccountByEid', { eid: host.eid });
     accountId = found.account_id;
-    // 表示用 ID は、呼び出し側でジョブの結果などに残るので、文には入れない（タスク 031）
+    // 表示用 ID は、呼び出し側でジョブの結果などに残るので、文には入れない
     if (!accountId) throw new Error('表示用 ID のアカウントが見つからない');
   }
 
@@ -80,7 +80,7 @@ export async function listCandidates(session: Session, host: Host, isKnown: (uui
 }
 
 /**
- * 取りこぼしの警告（タスク 032）。前回までに見た一覧（previous）と今回の一覧（current）を、四麻・三麻ごとに比べる。
+ * 取りこぼしの警告。前回までに見た一覧（previous）と今回の一覧（current）を、四麻・三麻ごとに比べる。
  * 一覧は新しい方から最大 LIST_LIMIT 件の続いた範囲なので、前回見た一番新しい対局が今回の一覧にあれば、その間に抜けは無い。
  * 今回の一覧が上限に達していて、前回見た一番新しい対局が入っていなければ、その間の対局が一覧から外れて、もう取れないおそれがある。
  * 取り込んだか（処理済みか）は見ない。主催者はリーグ以外の友人戦も打つので、未処理の対局が残るのはふつうのこと。

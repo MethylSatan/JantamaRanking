@@ -31,7 +31,7 @@ export interface Ranking {
 export type RankingSummary = Pick<Ranking, 'id' | 'name' | 'state'>;
 
 /**
- * ランキングの雀魂アカウント（候補の対局を取ってくる元）。内部 ID で持つ（タスク 031）。
+ * ランキングの雀魂アカウント（候補の対局を取ってくる元）。内部 ID で持つ。
  * 表示用 ID で指定したものは、最初の候補の更新で内部 ID を引くまでの仮の項目（pendingId）で、引いたら消す
  */
 export interface RankingAccount {
@@ -88,7 +88,7 @@ export interface GameState {
 export type ProfileStatus = 'pending' | 'approved';
 
 /**
- * 利用者の情報（`USER#<sub>` / `PROFILE`。タスク 023）。申請で本人が書く。
+ * 利用者の情報（`USER#<sub>` / `PROFILE`）。申請で本人が書く。
  * Discord の ID・名前はこの項目にだけ置き、操作ログや Host の項目には書かない（消すときはこの項目と Cognito の利用者を消す）
  */
 export interface Profile {

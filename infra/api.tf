@@ -139,7 +139,7 @@ data "aws_iam_policy_document" "api" {
     resources = [aws_dynamodb_table.main.arn, "${aws_dynamodb_table.main.arn}/index/*"]
   }
 
-  # 利用者の一覧・削除（タスク 023。申請の却下、利用者をやめる）
+  # 利用者の一覧・削除（申請の却下、利用者をやめる）
   statement {
     actions = [
       "cognito-idp:ListUsers", "cognito-idp:ListUsersInGroup",

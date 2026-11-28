@@ -1,4 +1,4 @@
-// 対局の結果の一覧から、ランキングを作る。ルールは固定（docs/decisions.md 2026-11-19 タスク 012）。
+// 対局の結果の一覧から、ランキングを作る。ルールは固定（docs/decisions.md 2026-11-19「集計ルールの移植」）。
 import type { GameResult, Mode, PlayerResult, RankingRow } from './types.ts';
 import { businessMonth, businessYear, inPeriod, type Period } from './period.ts';
 

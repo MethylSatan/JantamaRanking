@@ -58,7 +58,7 @@ test('Admin の一連の操作と操作ログ', async () => {
   assert.deepEqual(removed.body.accounts.map((a: { internalId: string }) => a.internalId), ['87654321']);
 
   const list = await call('GET', '/api/rankings', { token: 'admin' });
-  // 管理人の一覧には雀魂アカウントの数が付く（タスク 023）
+  // 管理人の一覧には雀魂アカウントの数が付く
   assert.deepEqual(list.body.rankings, [{ id, name: '半荘戦', state: 'public', accountCount: 1 }]);
 
   const deleted = await call('DELETE', `/api/rankings/${id}`, { token: 'admin' });

@@ -311,7 +311,7 @@ form.inline,
   }
 }
 
-/* 閲覧の画面（ranking.html。タスク 027） */
+/* 閲覧の画面（ranking.html） */
 .filters {
   display: flex;
   flex-wrap: wrap;
@@ -431,7 +431,7 @@ th button.sort .arrow {
   }
 }
 
-/* 利用者（タスク 023） */
+/* 利用者 */
 textarea {
   display: block;
   width: 100%;

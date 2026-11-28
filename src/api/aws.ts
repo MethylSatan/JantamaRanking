@@ -137,7 +137,7 @@ const toDirectoryUser = (u: UserType): DirectoryUser | undefined => {
   return { sub, username: u.Username, createdAt: (u.UserCreateDate ?? new Date(0)).toISOString() };
 };
 
-/** Cognito のユーザープールの利用者（タスク 023）。数が小さい（上限50人）ので、一覧はその都度引く */
+/** Cognito のユーザープールの利用者。数が小さい（上限50人）ので、一覧はその都度引く */
 export class CognitoDirectory implements Directory {
   private readonly cognito: CognitoIdentityProviderClient;
   private readonly poolId: string;

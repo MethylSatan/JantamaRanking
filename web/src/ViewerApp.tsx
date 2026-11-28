@@ -1,4 +1,4 @@
-// 閲覧の画面（タスク 027）: /ranking.html?id=<公開 ID>。ログインなしで、ランキングを見て並べ替え・絞り込みする。
+// 閲覧の画面: /ranking.html?id=<公開 ID>。ログインなしで、ランキングを見て並べ替え・絞り込みする。
 // 絞り込みの状態は URL のクエリに持たせ、URL を渡せば同じ表を開ける。
 
 import { useEffect, useMemo, useState } from 'preact/hooks';

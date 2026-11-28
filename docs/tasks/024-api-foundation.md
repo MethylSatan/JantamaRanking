@@ -6,7 +6,7 @@
 雀魂に要求しない部分の API を作る。ログインした利用者を確かめ、`authorize()` で判断し、ランキングと雀魂アカウントの指定を DynamoDB に持ち、操作ログを残す。025（取り込み）と 026（管理の画面）の土台にする。
 
 ## 読むべき資料
-- `docs/architecture.md`「データモデル」「API」「権限（タスク 022）」
+- `docs/architecture.md`「データモデル」「API」「権限」
 - `docs/deploy.md`「API と OAC」（`x-auth-token`、`x-amz-content-sha256`）
 - `docs/tasks/013-web-ui.md` のメモ（タスク 014・020・021・022 からの申し送り）
 - `src/api/handler.ts`

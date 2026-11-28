@@ -6,7 +6,7 @@
 主催者（Host）に開放するときに、Host が画面で自分のランキングを操作でき、Admin が画面で Host を付け外しできるようにする。利用者が増える見込みは高くないので、開放すると決めたときに着手する（2026-11-25 ユーザーの判断）。
 
 ## 読むべき資料
-- `docs/architecture.md`「権限（タスク 022）」
+- `docs/architecture.md`「権限」
 - `docs/decisions.md` 2026-11-25（タスク 022、タスク 021）
 - `docs/local/008-terms-notes.md`（ローカル限定。雀魂の規約面の暫定の判断）
 - `docs/local/014-login-notes.md`（ローカル限定。Discord の規約の要点）

@@ -1,5 +1,5 @@
-// 管理の画面（タスク 026）。ログイン → ランキングの一覧（#/）→ ランキング（#/r/<ID>）。管理人は利用者（#/users）も。
-// 管理人でなく、承認されていない人は申請の画面（タスク 023）。
+// 管理の画面。ログイン → ランキングの一覧（#/）→ ランキング（#/r/<ID>）。管理人は利用者（#/users）も。
+// 管理人でなく、承認されていない人は申請の画面。
 
 import { useEffect, useState } from 'preact/hooks';
 import { api, LoginRequired, type Me } from './lib/api.ts';

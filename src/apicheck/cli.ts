@@ -2,7 +2,7 @@
 //   node src/apicheck/cli.ts login            Playwright でブラウザを開き、Discord でログインしてトークンを保存する
 //   node src/apicheck/cli.ts smoke            Admin の一連の操作と 401 を確かめる（テスト用のランキングを作り、最後に削除＝非公開にする）
 //   node src/apicheck/cli.ts flow <表示用ID> [取り込む件数]
-//                                             候補の更新 → 取り込み → ランキングの JSON → 対象外・戻す → 作り直し → 公開 ID の取り直し（タスク 025）。
+//                                             候補の更新 → 取り込み → ランキングの JSON → 対象外・戻す → 作り直し → 公開 ID の取り直し。
 //                                             雀魂へのログインは候補の更新と取り込みで2回。テスト用のランキングは最後に削除（非公開）にする
 //   node src/apicheck/cli.ts call GET /api/me [JSON の本文]
 // Discord のログインの入力は手で行う（自動化しない）。保存先は local/apicheck/（gitignore 済み）。

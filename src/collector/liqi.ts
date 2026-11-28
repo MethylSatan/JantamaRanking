@@ -1,4 +1,4 @@
-// liqi（雀魂の protobuf）の定義を、WebGL 版の静的ファイルから作る（タスク 017、docs/decisions.md 2026-11-19）。
+// liqi（雀魂の protobuf）の定義を、WebGL 版の静的ファイルから作る（docs/decisions.md 2026-11-19「liqi の定義への追従」）。
 // 定義の Lua（protoc-gen-lua の生成物）は暗号化されている。鍵は公開リポジトリに置かず、呼び出し側から受け取る。
 import protobuf from 'protobufjs';
 import { PB_LUA_NAMES } from './static.ts';

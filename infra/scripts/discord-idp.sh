@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Cognito の IdP「Discord」（OIDC）を作る。すでにあれば更新する。terraform apply から呼ばれる（auth.tf の terraform_data.discord_idp）。
 # Client Secret を tfstate に入れないため、IdP は Terraform のリソースにせず、secret は SSM の SecureString から読む
-# （docs/decisions.md 2026-11-23 タスク 020）。secret はコマンドの引数に載せず、自分だけが読める一時ファイルで AWS CLI に渡す。
+# （docs/decisions.md 2026-11-23「Discord ログインの接続」）。secret はコマンドの引数に載せず、自分だけが読める一時ファイルで AWS CLI に渡す。
 # 環境変数: USER_POOL_ID、CLIENT_ID、SECRET_PARAMETER、AUTHORIZE_SCOPES、OIDC_ISSUER、AWS_REGION
 set -euo pipefail
 

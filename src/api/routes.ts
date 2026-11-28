@@ -51,7 +51,7 @@ type Handler = (ctx: Context, params: string[]) => Promise<Response>;
 
 const NAME_MAX = 100;
 const NOTE_MAX = 500;
-/** 1つのランキングの雀魂アカウントがこの数以上になったら、管理人に知らせる（上限ではない。タスク 023） */
+/** 1つのランキングの雀魂アカウントがこの数以上になったら、管理人に知らせる（上限ではない） */
 export const ACCOUNT_ALERT_COUNT = 32;
 // Cognito の sub
 const SUB = '([0-9a-f-]{36})';
@@ -123,7 +123,7 @@ const log = (
 const summary = (r: Ranking): RankingSummary => ({ id: r.id, name: r.name, state: r.state });
 
 /**
- * 画面に返す雀魂アカウント。表示用 ID は返さない（タスク 031）。
+ * 画面に返す雀魂アカウント。表示用 ID は返さない。
  * 名前は、候補の更新で分かったもの（雀魂アカウントの項目）を、指定したときの名前より優先する
  */
 const accountViews = (store: Store, accounts: RankingAccount[]) =>
@@ -224,7 +224,7 @@ const deleteRanking: Handler = async (ctx, [id]) => {
   return { status: 200, body: await detail(ctx.deps.store, { ...ranking, state: 'deleted' }, via) };
 };
 
-// 雀魂アカウントの指定（タスク 031）。どの形でも雀魂には要求しない
+// 雀魂アカウントの指定。どの形でも雀魂には要求しない
 // 内部 ID で指定する（ランキングの対局の参加者から選ぶ、または Admin が直接）。名前は対局から引く
 const addAccount: Handler = async (ctx, [id, rawInternalId]) => {
   const { via, ranking } = await authorize(ctx.user, 'setAccounts', id!, ctx.deps.store);
@@ -417,7 +417,7 @@ const getJob: Handler = async (ctx, [jobId]) => {
   return { status: 200, body: { job } };
 };
 
-// --- 申請・利用者・Host の付け外し（タスク 023） ---
+// --- 申請・利用者・Host の付け外し ---
 // 誰でも Discord でログインでき（pre sign-up は人数だけ見る）、本人が申請し、管理人が承認して Host に付ける。
 // 申請と取り下げは、ログインした人なら誰でもできる（権限の表には入れない。GET /api/me と同じ扱い）
 

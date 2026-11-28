@@ -1,4 +1,4 @@
-# Admin・Host（主催者）の認証。ログインは Discord だけ（Discord を OIDC の IdP にする。docs/decisions.md 2026-11-20 タスク 014、2026-11-23 タスク 020）。
+# Admin・Host（主催者）の認証。ログインは Discord だけ（Discord を OIDC の IdP にする。docs/decisions.md 2026-11-20「ログインの方式」、2026-11-23「Discord ログインの接続」）。
 # 自己登録は無効。Discord からの初回のログインで利用者が作られるが、許可していない Discord の ID は pre sign-up で拒む（presignup.tf）
 resource "aws_cognito_user_pool" "main" {
   name           = local.name
@@ -61,7 +61,7 @@ resource "aws_route53_record" "auth" {
 # Discord（OIDC）。discovery は https://discord.com/.well-known/openid-configuration。
 # IdP は Terraform のリソースにしない。aws_cognito_identity_provider には tfstate に残らない書き方（write-only）がなく、
 # Client Secret が tfstate に入るため。secret は SSM の SecureString に手で入れ、apply のときにスクリプトが読んで IdP を作る・更新する
-# （docs/decisions.md 2026-11-23 タスク 020）。secret を変えたときは terraform apply -replace=terraform_data.discord_idp
+# （docs/decisions.md 2026-11-23「Discord ログインの接続」）。secret を変えたときは terraform apply -replace=terraform_data.discord_idp
 locals {
   discord_secret_parameter = "/${local.name}/discord-client-secret"
   # 取るのは Discord の ID（sub）だけ。メールや名前は求めない（Discord の規約: 必要なデータだけ）
@@ -102,7 +102,7 @@ resource "aws_cognito_user_pool_client" "web" {
   allowed_oauth_flows_user_pool_client = true
   allowed_oauth_flows                  = ["code"]
   allowed_oauth_scopes                 = ["openid"]
-  # 管理の画面（タスク 013 までは確認用の仮のページ）。localhost は手元での確認用
+  # 管理の画面。localhost は手元での確認用
   callback_urls = ["https://${local.fqdn}/admin.html", "http://localhost:5173/admin.html"]
   logout_urls   = ["https://${local.fqdn}/", "http://localhost:5173/"]
 

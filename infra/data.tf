@@ -34,7 +34,7 @@ resource "aws_s3_bucket_versioning" "site" {
   }
 }
 
-# 対局・ランキング（企画）・主催者・操作ログ・ロック。項目の形はタスク 013 で決める
+# 対局・ランキング（企画）・主催者・操作ログ・ロック。項目の形は docs/architecture.md「データモデル」
 resource "aws_dynamodb_table" "main" {
   name         = local.name
   billing_mode = "PAY_PER_REQUEST"

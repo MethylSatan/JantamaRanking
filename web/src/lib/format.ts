@@ -49,7 +49,7 @@ export const opLabel = (op: string): string => OP_LABELS[op] ?? op;
 
 /**
  * 雀魂アカウントの呼び方。名前（一覧に出ていたニックネーム）を優先する。
- * 表示用 ID は API から来ない（タスク 031）。表示用 ID で指定して、まだ候補を更新していないものは名前も ID も無い
+ * 表示用 ID は API から来ない。表示用 ID で指定して、まだ候補を更新していないものは名前も ID も無い
  */
 export function accountLabel(a: { name?: unknown; internalId?: unknown }): string {
   if (typeof a.name === 'string' && a.name !== '') return a.name;
@@ -130,6 +130,6 @@ function jobLines(job: Pick<Job, 'kind' | 'result'>): string[] {
   }
 }
 
-/** 公開 URL（閲覧者の画面。タスク 027） */
+/** 公開 URL（閲覧者の画面） */
 export const publicUrl = (origin: string, publicId: string): string =>
   `${origin}/ranking.html?id=${encodeURIComponent(publicId)}`;

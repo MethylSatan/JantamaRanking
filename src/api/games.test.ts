@@ -1,4 +1,4 @@
-// タスク 025: 候補の更新・取り込み・対象外・作り直し・公開 ID・ジョブ（API を通して確かめる）。
+// 候補の更新・取り込み・対象外・作り直し・公開 ID・ジョブ（API を通して確かめる）。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { LOCK_TTL_MS } from './jobs.ts';
